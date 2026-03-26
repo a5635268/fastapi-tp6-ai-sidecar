@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+import sys
+import importlib
+import pkgutil
+import asyncio
+from pathlib import Path
+
+# 配置 Command 目录
+COMMAND_DIR = Path(__file__).resolve().parent / "app" / "command"
+
+def load_commands():
+    """动态扫描并加载 app.command 下的所有可用命令类"""
+    commands = {}
+    if not COMMAND_DIR.exists():
+        COMMAND_DIR.mkdir(parents=True, exist_ok=True)
+        return commands
+    
+    for module_info in pkgutil.iter_modules([str(COMMAND_DIR)]):
+        module_name = f"app.command.{module_info.name}"
+        module = importlib.import_module(module_name)
+        if hasattr(module, "Command"):
+            cmd_class = getattr(module, "Command")
+            if hasattr(cmd_class, "name"):
+                commands[cmd_class.name] = cmd_class
+    return commands
+
+def main():
+    commands = load_commands()
+    
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print("\\n🔥 FastAPI Enterprise Console (Inspired by ThinkPHP6)")
+        print("="*50)
+        print("用法:")
+        print("  python fast <command> [args...]\\n")
+        print("可用命令:")
+        if not commands:
+            print("  (暂无可用命令，请在 app/command 下创建命令脚本)")
+        for name, cmd in commands.items():
+            desc = getattr(cmd, "description", "无描述信息")
+            print(f"  {name:<20} {desc}")
+        print("\\n")
+        sys.exit(0)
+        
+    cmd_name = sys.argv[1]
+    
+    if cmd_name not in commands:
+        print(f"\\n❌ 错误: 未找到名为 '{cmd_name}' 的命令集！请输入 python fast 获取命令列表。\\n")
+        sys.exit(1)
+        
+    cmd_class = commands[cmd_name]
+    
+    # 允许通过 argparse 添加复杂入参
+    cmd_instance = cmd_class()
+    args = sys.argv[2:]
+    
+    # 兼容异步命令执行 (如果带有 async/await 和对 DB / ORM 的操作)
+    execute_func = cmd_instance.execute
+    if asyncio.iscoroutinefunction(execute_func):
+        asyncio.run(execute_func(*args))
+    else:
+        execute_func(*args)
+
+if __name__ == "__main__":
+    main()

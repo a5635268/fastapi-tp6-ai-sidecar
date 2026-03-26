@@ -1,0 +1,21 @@
+## Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+## Virtual environments
+venv/
+.venv/
+
+## Local database files (SQLite)
+test.db*
+
+## OS metadata
+.DS_Store
+
+## Environment secrets (keep .env.example)
+.env
+.env.*
+!.env.example
+

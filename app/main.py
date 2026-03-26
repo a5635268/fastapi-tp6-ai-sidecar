@@ -10,7 +10,7 @@ import uvicorn
 from tortoise.contrib.fastapi import register_tortoise
 
 from app.core.config import settings
-from app.routers import hello, user, langchain
+from app.routers import hello, user, langchain, wechat, article
 
 
 # ==================== 创建 FastAPI 应用实例 ====================
@@ -70,6 +70,8 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 app.include_router(hello.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
 app.include_router(langchain.router, prefix="/api/v1")
+app.include_router(wechat.router, prefix="/api/v1")
+app.include_router(article.router, prefix="/api/v1")
 
 
 # ==================== 健康检查 ====================

@@ -13,6 +13,16 @@ from tortoise.contrib.fastapi import register_tortoise
 from app.core.config import settings
 from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
 from app.routers import hello, user, langchain, wechat, article, article_news
+import logging
+
+# ==================== 配置全局日志 ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logging.getLogger("tortoise.db_client").setLevel(logging.DEBUG)
+logging.getLogger("aiomysql").setLevel(logging.DEBUG)
+logging.getLogger("asyncmy").setLevel(logging.DEBUG)
 
 
 # ==================== 创建 FastAPI 应用实例 ====================
@@ -119,6 +129,37 @@ async def health_check():
 async def startup_event():
     """应用启动时执行"""
     print(f"应用启动：{settings.APP_NAME} v{settings.APP_VERSION}")
+    
+    # === 增加数据库连接配置日志，帮助排查云端 Docker 连接问题 ===
+    try:
+        db_config = settings.TORTOISE_ORM["connections"]["default"]
+        if isinstance(db_config, dict):
+            creds = db_config.get("credentials", {})
+            host = creds.get("host")
+            port = creds.get("port")
+            user = creds.get("user")
+            db_name = creds.get("database")
+            print(f"================== 数据库连接信息 ==================")
+            print(f"🌍 DB Host: {host}")
+            print(f"🔌 DB Port: {port}")
+            print(f"👤 DB User: {user}")
+            print(f"📦 DB Name: {db_name}")
+            
+            if host in ("127.0.0.1", "localhost", "0.0.0.0"):
+                print("⚠️  [警告] 检测到数据库 Host 为 localhost/127.0.0.1。")
+                print("⚠️  [警告] 如果应用当前正运行在 Docker 容器内部，这里的 127.0.0.1 指向的是【容器自身】，而不是你的宿主机（Host Machine）！")
+                print("⚠️  [建议] 请在 .env 文件中将 DATABASE_URL 中的 IP 替换为宿主机的局域网 IP（比如 172.x.x.x、192.168.x.x）或 'host.docker.internal'（因系统而异）。")
+            print(f"====================================================")
+        else:
+            # 对于直接使用 string URL 的情况处理脱敏
+            safe_url = settings.DATABASE_URL
+            if "@" in safe_url:
+                safe_url = safe_url.split("@")[-1]
+            print(f"================== 数据库连接信息 ==================")
+            print(f"🌍 DB URL Target: {safe_url}")
+            print(f"====================================================")
+    except Exception as e:
+        print(f"⚠️  [警告] 打印数据库配置日志失败: {e}")
 
 
 @app.on_event("shutdown")

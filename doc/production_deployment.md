@@ -18,10 +18,8 @@ DEBUG=False
 # 2. 修改复杂安全的 JWT 秘钥
 JWT_SECRET="rM3^91bN(Q$r89@pLxT!34k_R-QZ9WjH..."
 
-# 3. 将默认的 SQLite 切换为生产级数据库 (需根据情况在服务器部署 PostgreSQL/MySQL)
-DATABASE_URL="postgres://username:password@10.0.0.10:5432/fastpaidb"
-# 或者 MySQL
-# DATABASE_URL="mysql://username:password@10.0.0.10:3306/fastpaidb"
+# 3. 配置生产级数据库连接及凭证参数 (MySQL)
+DATABASE_URL="mysql://username:password@10.0.0.10:3306/fastpaidb"
 ```
 
 ### 2. 数据库驱动及迁移调整

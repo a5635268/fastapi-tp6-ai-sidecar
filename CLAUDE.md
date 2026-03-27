@@ -158,7 +158,7 @@ ErrorCodeManager.register(3001, "业务特定错误", 400)
 配置通过 `app/core/config.py` 的 `Settings` 类管理，基于 `pydantic-settings` 从 `.env` 加载。
 
 关键配置项:
-- `DATABASE_URL`: 数据库连接 (默认 sqlite://test.db)
+- `DATABASE_URL`: 数据库连接 (默认 mysql://root:pass@127.0.0.1:3306/db)
 - `JWT_SECRET`: JWT 密钥 (生产环境必须修改)
 - `DEBUG`: 调试模式
 

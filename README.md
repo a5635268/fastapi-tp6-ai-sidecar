@@ -405,7 +405,7 @@ class Command:
 | `APP_VERSION` | 1.0.0 | 应用版本 |
 | `DEBUG` | true | 调试模式 |
 | `PORT` | 8000 | 服务端口 |
-| `DATABASE_URL` | sqlite://test.db | 数据库连接 |
+| `DATABASE_URL` | mysql://root:pass@127.0.0.1:3306/db | 数据库连接 |
 | `JWT_SECRET` | your-secret-key... | JWT 密钥（生产环境必改） |
 
 ## 技术栈
@@ -416,7 +416,7 @@ class Command:
 - **数据校验**: Pydantic >= 2.5.0
 - **配置管理**: pydantic-settings >= 2.1.0
 - **安全认证**: python-jose, passlib[bcrypt]
-- **数据库**: SQLite (开发) / 任意支持异步的数据库（生产）
+- **数据库**: MySQL （支持全异步驱动）
 - **AI 框架**: LangChain >= 0.3.0
 
 ## 开发建议

@@ -57,7 +57,8 @@ app/
 ├── dependencies.py      # 依赖注入 (认证、系统依赖等)
 ├── core/
 │   ├── config.py        # Pydantic Settings 配置管理
-│   └── security.py      # JWT、密码哈希
+│   ├── security.py      # JWT、密码哈希
+│   └── response.py      # 统一响应格式封装
 ├── ai/                  # AI 核心功能模块 (Domain 层)
 │   ├── models.py        # 大模型工厂与配置
 │   ├── prompts.py       # 提示词管理器
@@ -99,6 +100,59 @@ app.include_router(user.router, prefix="/api/v1")
 `dependencies.py` 提供全局共享依赖:
 - `get_current_user()`: JWT 认证用户
 
+## 统一响应格式
+
+项目采用统一的 API 响应格式，核心组件在 `app/core/response.py`：
+
+### 响应格式
+
+```json
+{
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": {}
+}
+```
+
+### 核心组件
+
+- **ErrorCodeManager**: 错误码管理器，支持 `register()` 动态注册业务错误码
+- **ResponseBuilder**: 响应构建器，提供 `success()`, `error()`, `paginated()` 等方法
+- **ApiException**: 业务异常类，抛出后自动转换为统一响应格式
+
+### 使用示例
+
+```python
+from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
+
+# 成功响应
+return ResponseBuilder.success(data=user, msg="获取成功")
+
+# 分页响应
+return ResponseBuilder.paginated(data=items, total=100, page=1, page_size=10)
+
+# 错误响应
+return ResponseBuilder.error(code=1, msg="操作失败")
+
+# 抛出异常（自动映射 HTTP 状态码）
+raise ApiException(code=12)  # 资源不存在，HTTP 404
+
+# 动态注册业务错误码
+ErrorCodeManager.register(3001, "业务特定错误", 400)
+```
+
+### 错误码规范
+
+| Code 范围 | 分类 |
+|-----------|------|
+| 0 | 成功 |
+| 1-99 | 基础运行错误 |
+| 100-999 | 用户/认证相关 |
+| 1000-1999 | 用户业务错误 |
+| 2000-2999 | 订单业务错误 |
+| 3000+ | 其他业务模块 |
+
 ## 配置管理
 
 配置通过 `app/core/config.py` 的 `Settings` 类管理，基于 `pydantic-settings` 从 `.env` 加载。
@@ -110,10 +164,11 @@ app.include_router(user.router, prefix="/api/v1")
 
 ## 扩展新模块
 
-1. `app/routers/module.py` - 创建路由
+1. `app/routers/module.py` - 创建路由（使用 ResponseBuilder 返回统一格式）
 2. `app/services/module.py` - 创建业务逻辑
 3. `app/schemas/module.py` - 创建数据模型
 4. 在 `app/main.py` 注册路由
+5. (可选) 使用 `ErrorCodeManager.register()` 注册业务错误码
 
 ### 示例：LangChain 模块
 
@@ -127,6 +182,8 @@ app.include_router(user.router, prefix="/api/v1")
 
 | 模块 | 路由前缀 | 说明 |
 |------|----------|------|
-| Hello | `/api/v1/hello` | Hello World 示例 |
+| Hello | `/api/v1/hello` | Hello World 示例、响应格式演示 |
 | User | `/api/v1/users` | 用户 CRUD 示例 |
 | LangChain | `/api/v1/langchain` | AI 聊天、文本处理、RAG |
+| Article | `/api/v1/articles` | 文章资讯 CRUD |
+| Wechat | `/api/v1/wechat` | 微信相关接口 |

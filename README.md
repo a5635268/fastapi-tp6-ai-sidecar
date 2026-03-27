@@ -10,7 +10,8 @@ fastapi-tp6/
 │   ├── dependencies.py      # 全局依赖注入组件库
 │   ├── core/
 │   │   ├── config.py        # Pydantic 配置管理
-│   │   └── security.py      # JWT、密码哈希等安全功能
+│   │   ├── security.py      # JWT、密码哈希等安全功能
+│   │   └── response.py      # 统一响应格式封装
 │   ├── ai/                  # AI 核心子系统 (领域层)
 │   │   ├── models.py        # LLM 工厂初始化
 │   │   ├── prompts.py       # 系统提示词管理
@@ -101,6 +102,51 @@ uv run python -m uvicorn app.main:app --reload
 
 ## API 接口说明
 
+### 统一响应格式
+
+所有接口均采用统一的响应格式：
+
+```json
+{
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": {}
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | int | 业务状态码，0 表示成功，非 0 表示失败 |
+| `msg` | string | 响应消息 |
+| `time` | int | Unix 时间戳 |
+| `data` | any | 响应数据 |
+
+分页响应额外包含：
+
+```json
+{
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": [],
+  "total": 100,
+  "page": 1,
+  "page_size": 10,
+  "pages": 10
+}
+```
+
+### HTTP 状态码策略
+
+| 场景 | HTTP 状态码 | body.code |
+|------|------------|-----------|
+| 成功 | 200 | 0 |
+| 客户端错误（参数、验证等） | 400 | 21, 6 等 |
+| 认证失败 | 401 | 2 |
+| 资源不存在 | 404 | 12 |
+| 服务端错误 | 500 | 1, 10 等 |
+
 ### Hello World 系列接口
 
 #### 基础问候
@@ -112,9 +158,12 @@ curl http://localhost:8000/api/v1/hello/
 响应：
 ```json
 {
-  "message": "Hello, World!",
-  "timestamp": "2026-03-23T12:36:30.326041",
-  "version": "1.0.0"
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": {
+    "greeting": "Hello, World!"
+  }
 }
 ```
 
@@ -127,26 +176,51 @@ curl "http://localhost:8000/api/v1/hello/?name=张三"
 响应：
 ```json
 {
-  "message": "Hello, 张三!",
-  "timestamp": "2026-03-23T12:36:42.696003",
-  "version": "1.0.0"
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": {
+    "greeting": "Hello, 张三!"
+  }
 }
 ```
 
-#### 简化版问候
+#### 分页响应示例
 
 ```bash
-curl http://localhost:8000/api/v1/hello/simple
+curl "http://localhost:8000/api/v1/hello/paginated?page=1&page_size=10"
 ```
 
 响应：
 ```json
 {
-  "code": 200,
-  "message": "Hello, World!",
-  "data": {
-    "greeting": "Welcome to FastAPI Enterprise!"
-  }
+  "code": 0,
+  "msg": "获取成功",
+  "time": 1707475200,
+  "data": [
+    {"id": 1, "name": "Item 1"},
+    {"id": 2, "name": "Item 2"}
+  ],
+  "total": 25,
+  "page": 1,
+  "page_size": 10,
+  "pages": 3
+}
+```
+
+#### 错误响应示例
+
+```bash
+curl http://localhost:8000/api/v1/hello/error?error_type=not_found
+```
+
+响应 (HTTP 404)：
+```json
+{
+  "code": 12,
+  "msg": "请求的资源不存在",
+  "time": 1707475200,
+  "data": null
 }
 ```
 
@@ -213,6 +287,7 @@ curl -X POST http://localhost:8000/api/v1/langchain/process \
 | **AI 领域层** | `ai/` | 专门处理大模型及 AI 流水线抽象 | - | - |
 | **模型层** | `models/` | 数据库 ORM 模型 | `think\Model` | `@Entity` |
 | **Schema 层** | `schemas/` | 数据校验与传输对象 | Validate | DTO/VO |
+| **响应层** | `core/response.py` | 统一响应格式封装 | Traits | ResponseWrapper |
 | **依赖层** | `dependencies.py` | 依赖注入组件 | - | DI Container |
 | **配置层** | `core/config.py` | 全局配置管理 | `config/` | `application.yml` |
 | **安全层** | `core/security.py` | 认证与加密 | - | Spring Security |
@@ -243,12 +318,19 @@ app.include_router(user.router, prefix="/api/v1")
 1. **创建路由文件** `app/routers/module.py`:
    ```python
    from fastapi import APIRouter
-   
+   from app.core.response import ResponseBuilder, ApiException
+
    router = APIRouter(prefix="/module", tags=["Module"])
-   
+
    @router.get("/")
    async def get_module():
-       return {"message": "Module endpoint"}
+       return ResponseBuilder.success(data={"result": "ok"}, msg="获取成功")
+
+   @router.get("/{item_id}")
+   async def get_item(item_id: int):
+       if item_id > 100:
+           raise ApiException(code=12, msg="项目不存在")
+       return ResponseBuilder.success(data={"id": item_id})
    ```
 
 2. **创建服务文件** `app/services/module.py`:
@@ -262,7 +344,7 @@ app.include_router(user.router, prefix="/api/v1")
 3. **创建 Schema 文件** `app/schemas/module.py`:
    ```python
    from pydantic import BaseModel
-   
+
    class ModuleResponse(BaseModel):
        result: str
    ```
@@ -271,6 +353,14 @@ app.include_router(user.router, prefix="/api/v1")
    ```python
    from app.routers import module
    app.include_router(module.router, prefix="/api/v1")
+   ```
+
+5. **(可选) 注册业务错误码**:
+   ```python
+   from app.core.response import ErrorCodeManager
+
+   # 在模块初始化时注册
+   ErrorCodeManager.register(3001, "模块特定错误", 400)
    ```
 
 ## 命令行工具 (Command Manager)
@@ -363,6 +453,39 @@ class Command:
    def get_llm(model_name: str = "gpt-3.5-turbo"):
        return ChatOpenAI(model=model_name, temperature=0.7)
    ```
+
+## 一键部署 (基于 Makefile 与 Docker)
+
+本项目内置了高度自动化的 `Makefile` 部署脚本，可以让你在本地修改完代码后，秒级同步至远程服务器并自动重建挂载容器。
+
+### 1. 配置服务器信息
+
+首先配置你本地的 `.env` 文件，加入或修改底部的部署块信息：
+
+```ini
+# 部署配置 (供 Makefile 使用)
+DEPLOY_USER=root
+DEPLOY_HOST=你的服务器IP
+DEPLOY_PATH=/www/wwwroot/fastapi-tp6-docker
+DEPLOY_CONTAINER=fastapi-tp6-app
+```
+
+> **注意：** 确保你已经通过 `ssh-copy-id` 配置了本地到服务器的 SSH 免密登录。
+
+### 2. 开始部署
+
+配置好后，在项目根目录终端执行：
+
+```bash
+# 执行自动化构建部署：代码同步 -> 容器重建 -> 服务拉起上线
+make deploy
+
+# 纯粹只看服务器的运行环境日志
+make logs
+
+# 纯粹只重启远端容器而不推送代码
+make restart
+```
 
 ## 常用 uv 命令
 

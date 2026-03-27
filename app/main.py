@@ -6,11 +6,13 @@ FastAPI 应用主入口
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 import uvicorn
 from tortoise.contrib.fastapi import register_tortoise
 
 from app.core.config import settings
-from app.routers import hello, user, langchain, wechat, article
+from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
+from app.routers import hello, user, langchain, wechat, article, article_news
 
 
 # ==================== 创建 FastAPI 应用实例 ====================
@@ -51,16 +53,44 @@ app.add_middleware(
 
 # ==================== 全局异常处理器 ====================
 
+@app.exception_handler(ApiException)
+async def api_exception_handler(request: Request, exc: ApiException) -> JSONResponse:
+    """
+    业务异常处理器
+    捕获 ApiException 并返回统一格式的响应
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=ResponseBuilder.error(exc.code, exc.msg).model_dump()
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """
+    Pydantic 参数验证错误处理器
+    将验证错误转换为统一响应格式
+    """
+    errors = exc.errors()
+    msg = "; ".join([f"{e['loc'][-1]}: {e['msg']}" for e in errors])
+    return JSONResponse(
+        status_code=400,
+        content=ResponseBuilder.validate_error(msg).model_dump()
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """全局异常处理器"""
+    """
+    全局异常处理器
+    捕获未处理的异常并返回统一格式
+    """
     return JSONResponse(
         status_code=500,
-        content={
-            "code": 500,
-            "message": f"服务器内部错误：{str(exc)}",
-            "data": None
-        }
+        content=ResponseBuilder.error(
+            code=1,
+            msg=f"服务器内部错误：{str(exc)}" if settings.DEBUG else "服务器内部错误"
+        ).model_dump()
     )
 
 
@@ -72,6 +102,7 @@ app.include_router(user.router, prefix="/api/v1")
 app.include_router(langchain.router, prefix="/api/v1")
 app.include_router(wechat.router, prefix="/api/v1")
 app.include_router(article.router, prefix="/api/v1")
+app.include_router(article_news.router, prefix="/api/v1")
 
 
 # ==================== 健康检查 ====================

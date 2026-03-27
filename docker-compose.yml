@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  fastapi-app:
+  fastapi-tp6-app:
     build:
       context: .
       dockerfile: Dockerfile
     image: fastapi-tp6:latest
-    container_name: fastapi-tp6
+    container_name: fastapi-tp6-app
     ports:
       - "8000:8000"
     environment:

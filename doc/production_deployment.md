@@ -191,3 +191,32 @@ docker run -d --name fastapi-app \
 ```
 
 随后外层仍然可以通过挂载 Nginx 并把 Proxy Pass 指向到这台主机的 `8000` 端口上来承接外网客户端的流量接入。
+
+### 3. 基于 Makefile 的一键自动化部署 (极速推荐)
+
+我们在项目中内置了非常成熟且优雅的 `Makefile` 本地部署脚本（类似于上面 Docker 容器化部署机制的封装自动化）。它底层的执行链路为：**`rsync 增量排除同步本机代码` + `SSH 远程触发 docker-compose up -d --build 新镜像拉起`**。
+
+你无需手动敲击繁琐的 Docker 参数命令，极大提升在开发后期的部署体验。
+
+**前置操作：**
+1. 请先在本地终端配置好对你的服务器免密登录：
+   ```bash
+   ssh-keygen -t rsa -b 4096  # （如已有可跳过）
+   ssh-copy-id root@你的服务器IP
+   ```
+2. 打开项目根目录的 `.env` 文件，将最底部的 `DEPLOY_*` 配置段精准填入：
+   ```ini
+   DEPLOY_USER=root
+   DEPLOY_HOST=你的服务器公网IP
+   DEPLOY_PATH=/www/wwwroot/fastapi-tp6-docker
+   DEPLOY_CONTAINER=fastapi-tp6-app
+   ```
+
+**仅需一条指令即可完成全链路构建拉起部署：**
+```bash
+make deploy
+```
+
+> **附属辅助指令**：
+> `make restart`：纯粹重启线上的容器（不发送和应用代码变更）。
+> `make logs`：进入命令行实时日志追踪模式，随时查看线上生产中是否报错（按 `Ctrl+C` 退出打印）。

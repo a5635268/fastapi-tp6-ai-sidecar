@@ -30,7 +30,7 @@ class Settings(BaseSettings):
             "connections": {"default": self.DATABASE_URL},
             "apps": {
                 "models": {
-                    "models": ["app.models.user"],
+                    "models": ["app.models.user", "app.models.article_news"],
                     "default_connection": "default",
                 },
             },
@@ -52,6 +52,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # 忽略 .env 中未定义的字段
 
 
 @lru_cache()

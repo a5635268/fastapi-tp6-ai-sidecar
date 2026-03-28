@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 # 数据库连接日志
-db_logger = logging.getLogger("tortoise.db")
+db_logger = logging.getLogger("tortoise.db_client")
 db_logger.setLevel(logging.DEBUG)
 
 
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # 数据库配置
     DATABASE_URL: str = "mysql://root:root123456@127.0.0.1:3306/test"
 
-    # MySQL 连接池配置
+    # 数据库连接池配置 (MySQL / PostgreSQL 通用)
     DB_POOL_MIN: int = 1          # 最小连接数
     DB_POOL_MAX: int = 10         # 最大连接数
     DB_CONNECT_TIMEOUT: int = 30  # 连接超时(秒)
@@ -37,11 +37,19 @@ class Settings(BaseSettings):
     # Tortoise ORM 配置字典
     @property
     def TORTOISE_ORM(self) -> dict:
-        # 解析 DATABASE_URL 判断数据库类型
-        is_mysql = self.DATABASE_URL.startswith("mysql")
+        """
+        根据 DATABASE_URL 的 scheme 自动选择数据库引擎：
+          - mysql://...     → tortoise.backends.mysql  (驱动: aiomysql)
+          - postgres://...  → tortoise.backends.psycopg (驱动: asyncpg)
+          - postgresql://.. → tortoise.backends.psycopg (驱动: asyncpg)
+        只需修改 .env 中的 DATABASE_URL 即可无缝切换。
+        """
+        url = self.DATABASE_URL
+        is_mysql = url.startswith("mysql")
+        is_postgres = url.startswith("postgres")  # 兼容 postgres:// 和 postgresql://
 
         if is_mysql:
-            # MySQL 连接配置（带连接池和超时设置）
+            # MySQL 连接配置（带连接池和超时设置，使用 aiomysql 驱动）
             db_config = {
                 "engine": "tortoise.backends.mysql",
                 "credentials": {
@@ -56,9 +64,30 @@ class Settings(BaseSettings):
                     "charset": "utf8mb4",
                 },
             }
+        elif is_postgres:
+            # PostgreSQL 连接配置（使用 asyncpg 驱动）
+            db_config = {
+                "engine": "tortoise.backends.asyncpg",
+                "credentials": {
+                    "host": self._parse_db_host(),
+                    "port": self._parse_db_port(),
+                    "user": self._parse_db_user(),
+                    "password": self._parse_db_password(),
+                    "database": self._parse_db_name(),
+                    "minsize": self.DB_POOL_MIN,
+                    "maxsize": self.DB_POOL_MAX,
+                },
+            }
         else:
-            # 其他数据库使用 URL 方式
-            db_config = self.DATABASE_URL
+            # 未知类型，直接透传 URL（兜底方案）
+            db_config = url
+
+        # 动态日志 logger：根据实际驱动类型注册对应的调试日志
+        driver_loggers = {}
+        if is_mysql:
+            driver_loggers["aiomysql"] = {"level": "DEBUG", "handlers": ["console"]}
+        elif is_postgres:
+            driver_loggers["asyncpg"] = {"level": "DEBUG", "handlers": ["console"]}
 
         return {
             "connections": {"default": db_config},
@@ -83,37 +112,28 @@ class Settings(BaseSettings):
                     }
                 },
                 "loggers": {
-                    "tortoise.db": {
+                    "tortoise.db_client": {
                         "level": "DEBUG",
                         "handlers": ["console"],
                     },
-                    "aiomysql": {
-                        "level": "DEBUG",
-                        "handlers": ["console"],
-                    },
+                    **driver_loggers,
                 },
             },
         }
 
-    def _parse_db_url_part(self, part: str) -> str:
-        """解析 DATABASE_URL 的辅助方法"""
-        # 格式: mysql://user:password@host:port/database
-        try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            if "@" in url:
-                auth, rest = url.split("@")
-                host_part, db = rest.split("/")
-                return {"auth": auth, "host_part": host_part, "db": db}.get(part, "")
-            return ""
-        except Exception:
-            return ""
+    def _strip_scheme(self) -> str:
+        """剥离 URL scheme 前缀，返回 user:pass@host:port/db 部分（与数据库类型无关）"""
+        url = self.DATABASE_URL
+        # 兼容 mysql://, postgres://, postgresql:// 等
+        if "://" in url:
+            url = url.split("://", 1)[1]
+        return url
 
     def _parse_db_host(self) -> str:
-        """解析数据库主机"""
+        """解析数据库主机（兼容 MySQL / PostgreSQL）"""
         try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            _, rest = url.split("@")
-            host_part, _ = rest.split("/")
+            _, rest = self._strip_scheme().split("@", 1)
+            host_part = rest.split("/")[0]
             if ":" in host_part:
                 return host_part.split(":")[0]
             return host_part
@@ -121,49 +141,41 @@ class Settings(BaseSettings):
             return "localhost"
 
     def _parse_db_port(self) -> int:
-        """解析数据库端口"""
+        """解析数据库端口（MySQL 默认 3306 / PostgreSQL 默认 5432）"""
+        is_postgres = self.DATABASE_URL.startswith("postgres")
+        default_port = 5432 if is_postgres else 3306
         try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            _, rest = url.split("@")
-            host_part, _ = rest.split("/")
+            _, rest = self._strip_scheme().split("@", 1)
+            host_part = rest.split("/")[0]
             if ":" in host_part:
                 return int(host_part.split(":")[1])
-            return 3306
+            return default_port
         except Exception:
-            return 3306
+            return default_port
 
     def _parse_db_user(self) -> str:
-        """解析数据库用户名"""
+        """解析数据库用户名（兼容 MySQL / PostgreSQL）"""
         try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            auth, _ = url.split("@")
-            if ":" in auth:
-                return auth.split(":")[0]
-            return auth
+            auth = self._strip_scheme().split("@")[0]
+            return auth.split(":")[0] if ":" in auth else auth
         except Exception:
             return "root"
 
     def _parse_db_password(self) -> str:
-        """解析数据库密码"""
+        """解析数据库密码（兼容 MySQL / PostgreSQL）"""
         try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            auth, _ = url.split("@")
-            if ":" in auth:
-                return auth.split(":")[1]
-            return ""
+            auth = self._strip_scheme().split("@")[0]
+            return auth.split(":")[1] if ":" in auth else ""
         except Exception:
             return ""
 
     def _parse_db_name(self) -> str:
-        """解析数据库名"""
+        """解析数据库名（兼容 MySQL / PostgreSQL）"""
         try:
-            url = self.DATABASE_URL.replace("mysql://", "")
-            _, rest = url.split("@")
-            _, db = rest.split("/")
+            _, rest = self._strip_scheme().split("@", 1)
+            db = rest.split("/", 1)[1]
             # 移除可能的查询参数
-            if "?" in db:
-                db = db.split("?")[0]
-            return db
+            return db.split("?")[0] if "?" in db else db
         except Exception:
             return "test"
 
@@ -178,6 +190,10 @@ class Settings(BaseSettings):
 
     # API Keys (用于集成 OpenAI 等第三方服务)
     OPENAI_API_KEY: Optional[str] = None
+
+    # Dify 知识库配置
+    DIFY_API_KEY: Optional[str] = None
+    DIFY_API_URL: str = "https://api.dify.ai/v1/datasets/{dataset_id}/document/create_by_text"
 
     class Config:
         env_file = ".env"

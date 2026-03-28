@@ -12,6 +12,7 @@ dependencies = [
     "tortoise-orm>=0.20.0",
     "aiomysql>=0.2.0",
     "asyncmy>=0.2.9",
+    "asyncpg>=0.29.0",
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "bcrypt<4.0.0",

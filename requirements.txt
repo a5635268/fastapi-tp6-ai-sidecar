@@ -11,6 +11,7 @@ pydantic-settings>=2.1.0
 # 数据库
 tortoise-orm>=0.20.0
 aiomysql>=0.2.0    # MySQL 异步驱动
+asyncpg>=0.29.0   # PostgreSQL 异步驱动
 
 # 安全认证
 python-jose[cryptography]>=3.3.0

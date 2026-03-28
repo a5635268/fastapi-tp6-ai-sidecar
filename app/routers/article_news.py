@@ -2,7 +2,8 @@
 资讯文章路由模块
 负责处理文章相关的 HTTP 请求
 """
-from fastapi import APIRouter, Query
+import httpx
+from fastapi import APIRouter, Query, BackgroundTasks
 
 from app.core.response import ResponseBuilder, ApiException
 from app.schemas.article_news import (
@@ -11,6 +12,7 @@ from app.schemas.article_news import (
     ArticleNewsResponse,
 )
 from app.services.article_news import ArticleNewsService
+from app.services.dify_sync import sync_single_article, run_sync_task
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
 
@@ -110,3 +112,29 @@ async def delete_article(article_id: int):
         raise ApiException(code=12, msg="文章不存在")
 
     return ResponseBuilder.success(msg="文章删除成功")
+
+
+@router.post(
+    "/{article_id}/sync-vector",
+    summary="同步单篇文章到向量知识库",
+    description="将指定文章推送到 Dify 向量知识库，并更新数据库同步状态。"
+               "同步操作在后台异步执行，接口立即返回。"
+)
+async def sync_article_to_vector(
+    article_id: int,
+    background_tasks: BackgroundTasks,
+):
+    """同步单篇文章到 Dify 向量知识库（后台执行）"""
+    service = ArticleNewsService()
+    article = await service.get_by_id(article_id)
+
+    if not article:
+        raise ApiException(code=12, msg="文章不存在")
+
+    async def _do_sync():
+        async with httpx.AsyncClient() as client:
+            await sync_single_article(client, article)
+
+    background_tasks.add_task(_do_sync)
+
+    return ResponseBuilder.success(msg=f"文章 ID={article_id} 的向量同步任务已提交，正在后台执行…")

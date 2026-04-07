@@ -3,14 +3,9 @@
 基于 Pydantic BaseSettings 实现强类型配置管理
 等价于 ThinkPHP6 的 config/ 目录或 Spring Boot 的 application.yml
 """
-import logging
 from typing import Optional
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-
-# 数据库连接日志
-db_logger = logging.getLogger("tortoise.db_client")
-db_logger.setLevel(logging.DEBUG)
 
 
 class Settings(BaseSettings):
@@ -193,7 +188,15 @@ class Settings(BaseSettings):
 
     # Dify 知识库配置
     DIFY_API_KEY: Optional[str] = None
-    DIFY_API_URL: str = "https://api.dify.ai/v1/datasets/{dataset_id}/document/create_by_text"
+    DIFY_KB_DATASET_ID: Optional[str] = None
+    DIFY_API_URL: str = "https://api.dify.ai/v1"  # 基础 URL，自动拼接 /datasets/{dataset_id}/document/create_by_text
+
+    @property
+    def DIFY_DOCUMENT_API_URL(self) -> str:
+        """构建完整的 Dify 知识库文档上传 API URL"""
+        if not self.DIFY_KB_DATASET_ID:
+            raise ValueError("DIFY_KB_DATASET_ID 未配置，请在 .env 中设置")
+        return f"{self.DIFY_API_URL}/datasets/{self.DIFY_KB_DATASET_ID}/document/create_by_text"
 
     class Config:
         env_file = ".env"

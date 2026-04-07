@@ -1,12 +1,15 @@
 """
 微信公众号文章处理服务
 """
+import logging
 import re
 from typing import Optional
 
 import html2text
 import httpx
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_article(url: str, proxy: Optional[str] = None, verify_ssl: bool = True) -> tuple[str, bool]:
@@ -18,15 +21,17 @@ async def fetch_article(url: str, proxy: Optional[str] = None, verify_ssl: bool 
     }
     async with httpx.AsyncClient(proxy=proxy, verify=verify_ssl, timeout=30.0) as client:
         try:
+            logger.debug("[微信抓取] 请求开始 url=%s verify_ssl=%s", url, verify_ssl)
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            # httpx会自动根据charset解码，如果需要强制可以解码
             html = response.text
+            logger.debug("[微信抓取] 请求成功 url=%s status=%s len=%d", url, response.status_code, len(html))
             return html, verify_ssl
-        except httpx.ConnectError as e:
+        except httpx.ConnectError:
             if verify_ssl:
-                print(f'SSL 证书验证失败或连接错误，尝试不验证证书...')
+                logger.warning("[微信抓取] SSL 证书验证失败或连接错误，降级重试(无SSL验证) url=%s", url)
                 return await fetch_article(url, proxy, verify_ssl=False)
+            logger.error("[微信抓取] 连接失败 url=%s", url)
             raise
 
 

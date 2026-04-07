@@ -4,12 +4,16 @@ Dify 向量知识库同步服务
 """
 import asyncio
 import json
+import logging
 import time
+from datetime import datetime, timezone
 
 import httpx
 
 from app.core.config import settings
 from app.models.article_news import ArticleNews
+
+logger = logging.getLogger(__name__)
 
 
 async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -> bool:
@@ -45,34 +49,22 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
             f"正文：\n{article.content}"
         )
 
-        # 3. 构造 Dify API 请求负载
+        # 3. 构造 Dify API 请求负载（极简高配版 - 根据 doc/difyapi 建议.md）
         payload = {
             "name": article.title,
             "text": dify_text,
             "indexing_technique": "high_quality",
 
-            # 启用父子分段结构
-            "doc_form": "hierarchical_model",
+            # 使用标准文本分段（新闻资讯类扁平化数据的最优解）
+            "doc_form": "text_model",
 
             # 指定 Embedding 模型
             "embedding_model_provider": "tongyi",
             "embedding_model": "text-embedding-v4",
 
-            # 分段规则
+            # 分段规则 - 极简高配版
             "process_rule": {
-                "mode": "custom",
-                "rules": {
-                    "pre_processing_rules": [
-                        {"id": "remove_extra_spaces", "enabled": True},
-                        {"id": "remove_urls_emails", "enabled": False},
-                    ],
-                    "segmentation": {
-                        "separator": "\n\n",
-                        "max_tokens": 1024,
-                        "chunk_overlap": 0,
-                    },
-                    "parent_mode": "paragraph",
-                },
+                "mode": "automatic"
             },
 
             # 检索设置
@@ -89,11 +81,20 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
                 },
                 "weights": {
                     "weight_type": "semantic_first",
-                    "vector_setting": {"vector_weight": 0.7},
+                    "vector_setting": {
+                        "vector_weight": 0.7,
+                        "embedding_provider_name": "tongyi",
+                        "embedding_model_name": "text-embedding-v4",
+                    },
                     "keyword_setting": {"keyword_weight": 0.3},
                 },
             },
         }
+
+        # 记录请求入参（脱敏）
+        logger.info("=> 请求 Dify API: 文章 ID=%s, 标题=%s", article.id, article.title[:50])
+        logger.info("=> 请求负载大小：%d 字节", len(json.dumps(payload)))
+        logger.info("=> 完整 Payload: %s", json.dumps(payload, ensure_ascii=False, indent=2))
 
         headers = {
             "Authorization": f"Bearer {settings.DIFY_API_KEY}",
@@ -102,26 +103,31 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
 
         # 4. 发送异步请求
         response = await client.post(
-            settings.DIFY_API_URL,
+            settings.DIFY_DOCUMENT_API_URL,
             json=payload,
             headers=headers,
             timeout=30.0,
         )
+
+        # 记录响应出参
+        logger.info("<= 响应状态码：%d", response.status_code)
+        logger.info("<= 响应内容：%s", response.text[:300])
+
         response.raise_for_status()
 
         # 5. 更新数据库同步状态
         article.is_vector_synced = True
-        article.vector_synced_at = int(time.time())
+        article.vector_synced_at = datetime.now(timezone.utc)
         await article.save(update_fields=["is_vector_synced", "vector_synced_at"])
 
-        print(f"✅ 成功同步文章 ID={article.id} 《{article.title[:30]}》")
+        logger.info("成功同步文章 ID=%s 《%s》", article.id, article.title[:30])
         return True
 
     except httpx.HTTPStatusError as e:
-        print(f"❌ 同步文章 ID={article.id} HTTP错误: {e.response.status_code} - {e.response.text[:200]}")
+        logger.error("同步文章 ID=%s HTTP 错误：%s - %s", article.id, e.response.status_code, e.response.text[:200])
         return False
     except Exception as e:
-        print(f"❌ 同步文章 ID={article.id} 失败: {str(e)}")
+        logger.error("同步文章 ID=%s 失败：%s", article.id, str(e))
         return False
 
 
@@ -144,11 +150,11 @@ async def run_sync_task(limit: int = 50) -> dict:
     ).limit(limit)
 
     if not articles:
-        print("📭 当前没有需要同步的文章。")
+        logger.info("当前没有需要同步的文章。")
         return {"total": 0, "success": 0, "failed": 0}
 
     total = len(articles)
-    print(f"🚀 开始同步 {total} 篇文章...")
+    logger.info("开始同步 %d 篇文章...", total)
 
     # 复用连接池并发推送
     async with httpx.AsyncClient() as client:
@@ -160,5 +166,5 @@ async def run_sync_task(limit: int = 50) -> dict:
     success = sum(1 for r in results if r is True)
     failed = total - success
 
-    print(f"✅ 本批次同步完毕：成功 {success} 篇，失败 {failed} 篇，共 {total} 篇。")
+    logger.info("本批次同步完毕：成功 %d 篇，失败 %d 篇，共 %d 篇。", success, failed, total)
     return {"total": total, "success": success, "failed": failed}

@@ -42,6 +42,7 @@ deploy: check-env
 		--exclude '.vscode' \
 		--exclude '.env' \
 		--exclude 'venv' \
+		--exclude 'logs' \
 		--exclude 'doc' \
 		--exclude '.spec-workflow' \
 		--exclude '.venv' \

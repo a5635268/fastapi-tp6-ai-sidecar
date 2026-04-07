@@ -4,11 +4,14 @@
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import logging
 from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -166,14 +169,18 @@ class BaseParser(ABC):
             follow_redirects=True
         ) as client:
             try:
+                logger.debug("[Parser.fetch] 请求开始 url=%s verify_ssl=%s", url, self.verify_ssl)
                 response = await client.get(url, headers=self._headers)
                 response.raise_for_status()
+                logger.debug("[Parser.fetch] 请求成功 url=%s status=%s len=%d", url, response.status_code, len(response.text))
                 return response.text
             except httpx.ConnectError:
                 if self.verify_ssl:
+                    logger.warning("[Parser.fetch] SSL 验证失败，降级重试 url=%s", url)
                     # SSL 验证失败时重试
                     self.verify_ssl = False
                     return await self.fetch(url)
+                logger.error("[Parser.fetch] 连接失败 url=%s", url)
                 raise
 
     async def fetch_with_info(self, url: str) -> FetchResult:
@@ -193,14 +200,26 @@ class BaseParser(ABC):
             follow_redirects=True
         ) as client:
             try:
+                logger.debug("[Parser.fetch_with_info] 请求开始 url=%s verify_ssl=%s", url, self.verify_ssl)
                 response = await client.get(url, headers=self._headers)
                 response.raise_for_status()
+                logger.debug("[Parser.fetch_with_info] 请求成功 url=%s status=%s", url, response.status_code)
 
                 # 提取纯文本
                 soup = BeautifulSoup(response.text, 'lxml')
                 # 移除脚本和样式
                 for elem in soup.find_all(['script', 'style', 'nav', 'header', 'footer']):
                     elem.decompose()
+
+                # 保留图片链接：将 <img> 替换为 ![alt](src) 格式
+                for img in soup.find_all('img'):
+                    src = img.get('src') or img.get('data-src') or ''
+                    alt = img.get('alt', '')
+                    if src:
+                        img.replace_with(f'![{alt}]({src})')
+                    else:
+                        img.decompose()
+
                 text = soup.get_text(separator='\n', strip=True)
 
                 return FetchResult(
@@ -213,14 +232,17 @@ class BaseParser(ABC):
                 )
             except httpx.ConnectError:
                 if self.verify_ssl:
+                    logger.warning("[Parser.fetch_with_info] SSL 验证失败，降级重试 url=%s", url)
                     self.verify_ssl = False
                     return await self.fetch_with_info(url)
+                logger.error("[Parser.fetch_with_info] 连接失败 url=%s", url)
                 return FetchResult(
                     url=url,
                     success=False,
                     error="连接失败"
                 )
             except httpx.HTTPStatusError as e:
+                logger.warning("[Parser.fetch_with_info] HTTP错误 url=%s status=%s", url, e.response.status_code)
                 return FetchResult(
                     url=url,
                     success=False,
@@ -228,6 +250,7 @@ class BaseParser(ABC):
                     status_code=e.response.status_code
                 )
             except Exception as e:
+                logger.error("[Parser.fetch_with_info] 未知异常 url=%s error=%s", url, e)
                 return FetchResult(
                     url=url,
                     success=False,

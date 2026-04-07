@@ -2,6 +2,8 @@
 资讯文章路由模块
 负责处理文章相关的 HTTP 请求
 """
+import logging
+
 import httpx
 from fastapi import APIRouter, Query, BackgroundTasks
 
@@ -15,6 +17,7 @@ from app.services.article_news import ArticleNewsService
 from app.services.dify_sync import sync_single_article, run_sync_task
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -132,9 +135,15 @@ async def sync_article_to_vector(
         raise ApiException(code=12, msg="文章不存在")
 
     async def _do_sync():
+        logger.info("[向量同步] 后台任务开始执行 article_id=%s", article_id)
         async with httpx.AsyncClient() as client:
-            await sync_single_article(client, article)
+            success = await sync_single_article(client, article)
+        if success:
+            logger.info("[向量同步] 后台任务完成 article_id=%s", article_id)
+        else:
+            logger.error("[向量同步] 后台任务失败 article_id=%s", article_id)
 
     background_tasks.add_task(_do_sync)
+    logger.info("[向量同步] 后台任务已提交 article_id=%s", article_id)
 
     return ResponseBuilder.success(msg=f"文章 ID={article_id} 的向量同步任务已提交，正在后台执行…")

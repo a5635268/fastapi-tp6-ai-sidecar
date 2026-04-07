@@ -78,7 +78,7 @@ cp .env.example .env
 ### 3. 运行应用
 
 ```bash
-# 方式 1：使用 uv run 运行（推荐）
+# 方式 1：使用 uv run 运行（推荐） kill -9 $(lsof -t -i:8000)
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 方式 2：激活虚拟环境后运行

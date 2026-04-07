@@ -1,12 +1,15 @@
 """
 文本处理流水线：封装单一任务的执行逻辑
 """
+import logging
 import time
 from typing import Optional, Dict, Any
 from langchain_core.output_parsers import StrOutputParser
 
 from .models import get_llm
 from .prompts import get_task_prompt
+
+logger = logging.getLogger(__name__)
 
 async def process_text_action(
     text: str,
@@ -20,9 +23,15 @@ async def process_text_action(
     llm = get_llm()
     chain = prompt | llm | StrOutputParser()
 
-    result = chain.invoke({"text": text})
+    logger.debug("[AI.process_text] 请求开始 task=%s text_len=%d", task, len(text))
+    try:
+        result = chain.invoke({"text": text})
+    except Exception as e:
+        logger.error("[AI.process_text] 调用失败 task=%s error=%s", task, e)
+        raise
 
     processing_time = time.time() - start_time
+    logger.debug("[AI.process_text] 请求成功 task=%s elapsed=%.3fs result_len=%d", task, processing_time, len(result))
 
     return {
         "result": result,

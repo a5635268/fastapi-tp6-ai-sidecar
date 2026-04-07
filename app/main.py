@@ -4,25 +4,64 @@ FastAPI 应用主入口
 等价于 ThinkPHP6 的 public/index.php 或 Spring Boot 的主类
 """
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import uvicorn
 from tortoise.contrib.fastapi import register_tortoise
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+import os
 
 from app.core.config import settings
 from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
 from app.routers import hello, user, langchain, wechat, article, article_news
-import logging
 
 # ==================== 配置全局日志 ====================
+
+# 创建 logs 目录
+LOGS_DIR = Path(__file__).parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+# 根日志配置
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        # 控制台输出
+        logging.StreamHandler(),
+        # 文件输出（所有日志）
+        RotatingFileHandler(
+            LOGS_DIR / "app.log",
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,           # 保留 5 个备份
+            encoding="utf-8"
+        ),
+        # 错误日志单独文件
+        logging.FileHandler(LOGS_DIR / "error.log", encoding="utf-8"),
+    ]
 )
+
+# 设置错误日志级别过滤器
+class ErrorLogFilter(logging.Filter):
+    """只记录 ERROR 及以上级别的日志"""
+    def filter(self, record):
+        return record.levelno >= logging.ERROR
+
+# 为 error.log 只添加错误级别日志
+for handler in logging.getLogger().handlers:
+    if isinstance(handler, logging.FileHandler) and "error.log" in handler.baseFilename:
+        handler.setLevel(logging.ERROR)
+        handler.addFilter(ErrorLogFilter())
+
+# 框架级日志：统一在 basicConfig 之后设置，避免 import 时序问题
 logging.getLogger("tortoise.db_client").setLevel(logging.DEBUG)
 logging.getLogger("aiomysql").setLevel(logging.DEBUG)
 logging.getLogger("asyncmy").setLevel(logging.DEBUG)
+
+# 创建应用专用 logger
+logger = logging.getLogger(__name__)
 
 
 # ==================== 创建 FastAPI 应用实例 ====================
@@ -128,9 +167,9 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
-    print(f"应用启动：{settings.APP_NAME} v{settings.APP_VERSION}")
-    
-    # === 增加数据库连接配置日志，帮助排查云端 Docker 连接问题 ===
+    logger.info("应用启动：%s v%s", settings.APP_NAME, settings.APP_VERSION)
+
+    # === 数据库连接配置日志，帮助排查云端 Docker 连接问题 ===
     try:
         db_config = settings.TORTOISE_ORM["connections"]["default"]
         if isinstance(db_config, dict):
@@ -139,33 +178,28 @@ async def startup_event():
             port = creds.get("port")
             user = creds.get("user")
             db_name = creds.get("database")
-            print(f"================== 数据库连接信息 ==================")
-            print(f"🌍 DB Host: {host}")
-            print(f"🔌 DB Port: {port}")
-            print(f"👤 DB User: {user}")
-            print(f"📦 DB Name: {db_name}")
-            
+            logger.info("DB Host=%s  Port=%s  User=%s  DB=%s", host, port, user, db_name)
+
             if host in ("127.0.0.1", "localhost", "0.0.0.0"):
-                print("⚠️  [警告] 检测到数据库 Host 为 localhost/127.0.0.1。")
-                print("⚠️  [警告] 如果应用当前正运行在 Docker 容器内部，这里的 127.0.0.1 指向的是【容器自身】，而不是你的宿主机（Host Machine）！")
-                print("⚠️  [建议] 请在 .env 文件中将 DATABASE_URL 中的 IP 替换为宿主机的局域网 IP（比如 172.x.x.x、192.168.x.x）或 'host.docker.internal'（因系统而异）。")
-            print(f"====================================================")
+                logger.warning(
+                    "检测到数据库 Host 为 %s。"
+                    "若应用运行在 Docker 容器内，此地址指向容器自身而非宿主机！"
+                    "建议将 DATABASE_URL 中的 Host 替换为宿主机局域网 IP 或 host.docker.internal。",
+                    host,
+                )
         else:
-            # 对于直接使用 string URL 的情况处理脱敏
             safe_url = settings.DATABASE_URL
             if "@" in safe_url:
                 safe_url = safe_url.split("@")[-1]
-            print(f"================== 数据库连接信息 ==================")
-            print(f"🌍 DB URL Target: {safe_url}")
-            print(f"====================================================")
+            logger.info("DB URL Target: %s", safe_url)
     except Exception as e:
-        print(f"⚠️  [警告] 打印数据库配置日志失败: {e}")
+        logger.warning("打印数据库配置日志失败: %s", e)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
-    print("应用已关闭")
+    logger.info("应用已关闭")
 
 
 # ==================== 注册 Tortoise ORM ====================

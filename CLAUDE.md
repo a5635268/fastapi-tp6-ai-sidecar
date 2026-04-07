@@ -1,12 +1,160 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> 最后更新：2026-04-07
 
 ## 项目概述
 
 基于《企业级项目目录规范与多应用路由网关架构》构建的 FastAPI 企业级项目模板，采用 MVC 分层架构，支持多应用模块化路由。
 
-## 常用命令
+**技术栈**：FastAPI + Pydantic + Tortoise ORM + LangChain
+
+## 架构图
+
+```mermaid
+graph TD
+    subgraph Client["客户端层"]
+        Browser[浏览器/API 调用方]
+    end
+
+    subgraph Gateway["路由网关层 app/routers/"]
+        Hello[hello.py]
+        User[user.py]
+        LangChain[langchain.py]
+        Wechat[wechat.py]
+        Article[article.py]
+        ArticleNews[article_news.py]
+    end
+
+    subgraph Service["业务服务层 app/services/"]
+        HelloSvc[hello.py]
+        UserSvc[user.py]
+        LangChainSvc[langchain.py]
+        WechatSvc[wechat.py]
+        ArticleSvc[article.py]
+        ArticleNewsSvc[article_news.py]
+        DifySvc[dify_sync.py]
+    end
+
+    subgraph Domain["领域层 app/ai/"]
+        Chat[chat.py]
+        Processing[processing.py]
+        RAG[rag.py]
+        Models[models.py]
+        Prompts[prompts.py]
+    end
+
+    subgraph Parser["解析器模块 app/parsers/"]
+        BaseParser[base.py]
+        WechatParser[wechat.py]
+        WinshangParser[winshang.py]
+        MallChinaParser[mallchina.py]
+        GenericParser[generic.py]
+    end
+
+    subgraph Data["数据层"]
+        Models[app/models/]
+        Schemas[app/schemas/]
+        DB[(MySQL/PostgreSQL)]
+    end
+
+    subgraph Core["核心模块 app/core/"]
+        Config[config.py]
+        Security[security.py]
+        Response[response.py]
+    end
+
+    Browser --> Gateway
+    Gateway --> Service
+    Service --> Domain
+    Service --> Parser
+    Service --> Data
+    Data --> DB
+    Gateway --> Core
+    Service --> Core
+    Domain --> Core
+    Parser --> Core
+
+    style Client fill:#e1f5ff
+    style Gateway fill:#fff4e1
+    style Service fill:#f0f9e8
+    style Domain fill:#fce4ec
+    style Parser fill:#f3e5f5
+    style Data fill:#e8f5e9
+    style Core fill:#ffebee
+```
+
+## 模块索引
+
+| 模块 | 路径 | 职责 | CLAUDE.md |
+|------|------|------|-----------|
+| 根模块 | `/` | 应用引导、路由注册、中间件配置 | [CLAUDE.md](./CLAUDE.md) |
+| 核心模块 | `app/core/` | 配置管理、安全认证、统一响应 | [CLAUDE.md](./app/core/CLAUDE.md) |
+| AI 模块 | `app/ai/` | 聊天对话、文本处理、RAG 检索 | [CLAUDE.md](./app/ai/CLAUDE.md) |
+| 路由控制器 | `app/routers/` | HTTP 请求处理与路由分发 | - |
+| 业务服务 | `app/services/` | 业务逻辑、第三方集成 | - |
+| 数据模型 | `app/models/` | Tortoise ORM 数据库模型 | - |
+| 数据契约 | `app/schemas/` | Pydantic 请求/响应校验 | - |
+| 文章解析器 | `app/parsers/` | 多网站文章解析策略 | [CLAUDE.md](./app/parsers/CLAUDE.md) |
+| 命令行 | `app/command/` | CLI 命令与后台任务 | - |
+
+## 模块结构图
+
+```mermaid
+graph TD
+    Root["(根) fastapi-tp6"] --> App["app/"];
+    
+    App --> Core["core"];
+    App --> AI["ai"];
+    App --> Routers["routers"];
+    App --> Services["services"];
+    App --> Models["models"];
+    App --> Schemas["schemas"];
+    App --> Parsers["parsers"];
+    App --> Command["command"];
+    
+    Core --> CoreConfig["config.py"];
+    Core --> CoreSecurity["security.py"];
+    Core --> CoreResponse["response.py"];
+    
+    AI --> AIChat["chat.py"];
+    AI --> AIProc["processing.py"];
+    AI --> AIRag["rag.py"];
+    AI --> AIModels["models.py"];
+    AI --> AIPrompts["prompts.py"];
+    
+    Routers --> RHello["hello.py"];
+    Routers --> RUser["user.py"];
+    Routers --> RLangChain["langchain.py"];
+    Routers --> RWechat["wechat.py"];
+    Routers --> RArticle["article.py"];
+    Routers --> RArticleNews["article_news.py"];
+    
+    Services --> SHello["hello.py"];
+    Services --> SUser["user.py"];
+    Services --> SLangChain["langchain.py"];
+    Services --> SWechat["wechat.py"];
+    Services --> SArticle["article.py"];
+    Services --> SArticleNews["article_news.py"];
+    Services --> SDify["dify_sync.py"];
+    
+    Models --> MUser["user.py"];
+    Models --> MArticle["article_news.py"];
+    
+    Parsers --> PBase["base.py"];
+    Parsers --> PWechat["wechat.py"];
+    Parsers --> PWinshang["winshang.py"];
+    Parsers --> PMallChina["mallchina.py"];
+    Parsers --> PGeneric["generic.py"];
+
+    click CoreConfig "./app/core/CLAUDE.md" "查看核心模块文档"
+    click AIChat "./app/ai/CLAUDE.md" "查看 AI 模块文档"
+    click RHello "./app/routers/CLAUDE.md" "查看路由模块文档"
+    click SHello "./app/services/CLAUDE.md" "查看服务模块文档"
+    click MUser "./app/models/CLAUDE.md" "查看模型模块文档"
+    click PBase "./app/parsers/CLAUDE.md" "查看解析器模块文档"
+```
+
+## 运行与开发
 
 ### 使用 uv 工具链（推荐）
 
@@ -25,86 +173,37 @@ uv pip install -r requirements.txt
 
 # 启动开发服务器
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 添加新依赖
-uv add <package-name>
-
-# 移除依赖
-uv remove <package-name>
 ```
 
-### 传统方式
+### 环境配置
+
+复制 `.env.example` 为 `.env` 并修改配置：
 
 ```bash
-# 创建虚拟环境
-python3 -m venv venv
-
-# 激活虚拟环境
-source venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动开发服务器
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cp .env.example .env
 ```
 
-## 架构结构
+关键配置项：
+- `DATABASE_URL`: 数据库连接
+- `JWT_SECRET`: JWT 密钥（生产环境必须修改）
+- `DEBUG`: 调试模式
+- `DIFY_API_KEY`: Dify API 密钥（可选）
+- `DIFY_KB_DATASET_ID`: Dify 知识库 ID（可选）
 
-```
-app/
-├── main.py              # 应用引导、中间件、路由网关注册
-├── dependencies.py      # 依赖注入 (认证、系统依赖等)
-├── core/
-│   ├── config.py        # Pydantic Settings 配置管理
-│   ├── security.py      # JWT、密码哈希
-│   └── response.py      # 统一响应格式封装
-├── ai/                  # AI 核心功能模块 (Domain 层)
-│   ├── models.py        # 大模型工厂与配置
-│   ├── prompts.py       # 提示词管理器
-│   ├── chat.py          # 聊天对话流水线
-│   ├── processing.py    # 文本处理流水线
-│   └── rag.py           # RAG 检索生成流水线
-├── routers/             # 路由控制器 (Controller 层)
-│   ├── hello.py         # Hello World 路由
-│   ├── user.py          # 用户 CRUD 路由
-│   └── langchain.py     # LangChain AI 路由
-├── services/            # 业务逻辑层 (Service 层)
-│   ├── hello.py         # Hello World 服务
-│   ├── user.py          # 用户服务
-│   └── langchain.py     # LangChain AI 服务
-├── models/              # Tortoise ORM 模型
-│   └── user.py          # 用户模型
-└── schemas/             # Pydantic 数据校验 (DTO/VO)
-    ├── __init__.py      # 通用 Schema
-    └── langchain.py     # LangChain Schema
-.venv/                   # uv 管理的虚拟环境
-```
+## API 路由总览
 
-## 核心架构模式
-
-### 路由网关
-多应用路由通过 `APIRouter` 在 `main.py` 中注册:
-```python
-app.include_router(hello.router, prefix="/api/v1")
-app.include_router(user.router, prefix="/api/v1")
-```
-
-### 分层职责
-- **routers/**: 仅处理 HTTP 请求参数、委派业务层、返回响应
-- **services/**: 核心业务逻辑、事务处理、第三方集成
-- **models/**: 数据库表结构映射
-- **schemas/**: 请求/响应数据校验
-
-### 依赖注入
-`dependencies.py` 提供全局共享依赖:
-- `get_current_user()`: JWT 认证用户
+| 路由前缀 | 模块 | 说明 |
+|----------|------|------|
+| `/api/v1/hello` | Hello | Hello World 示例、统一响应演示 |
+| `/api/v1/users` | User | 用户 CRUD 操作 |
+| `/api/v1/langchain` | LangChain | AI 聊天、文本处理、RAG 查询 |
+| `/api/v1/wechat` | Wechat | 微信公众号文章解析 |
+| `/api/v1/articles` | Article | 文章解析与爬取 |
+| `/api/v1/article` | ArticleNews | 资讯文章 CRUD 与向量同步 |
 
 ## 统一响应格式
 
-项目采用统一的 API 响应格式，核心组件在 `app/core/response.py`：
-
-### 响应格式
+项目采用统一的 API 响应格式：
 
 ```json
 {
@@ -115,75 +214,76 @@ app.include_router(user.router, prefix="/api/v1")
 }
 ```
 
-### 核心组件
-
-- **ErrorCodeManager**: 错误码管理器，支持 `register()` 动态注册业务错误码
+核心组件：
+- **ErrorCodeManager**: 错误码管理器，支持动态注册
 - **ResponseBuilder**: 响应构建器，提供 `success()`, `error()`, `paginated()` 等方法
-- **ApiException**: 业务异常类，抛出后自动转换为统一响应格式
+- **ApiException**: 业务异常类，抛出后自动转换为统一响应
 
-### 使用示例
+## 编码规范
 
-```python
-from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
+### 分层职责
 
-# 成功响应
-return ResponseBuilder.success(data=user, msg="获取成功")
+| 层级 | 目录 | 职责 |
+|------|------|------|
+| Controller | `app/routers/` | HTTP 请求参数处理、委派业务层、返回响应 |
+| Service | `app/services/` | 核心业务逻辑、事务处理、第三方集成 |
+| Domain | `app/ai/` | AI 领域逻辑、流水线工厂 |
+| Model | `app/models/` | 数据库表结构映射（Tortoise ORM） |
+| Schema | `app/schemas/` | 请求/响应数据校验（Pydantic） |
+| Parser | `app/parsers/` | 文章解析策略（策略模式） |
 
-# 分页响应
-return ResponseBuilder.paginated(data=items, total=100, page=1, page_size=10)
+### 命名约定
 
-# 错误响应
-return ResponseBuilder.error(code=1, msg="操作失败")
-
-# 抛出异常（自动映射 HTTP 状态码）
-raise ApiException(code=12)  # 资源不存在，HTTP 404
-
-# 动态注册业务错误码
-ErrorCodeManager.register(3001, "业务特定错误", 400)
-```
-
-### 错误码规范
-
-| Code 范围 | 分类 |
-|-----------|------|
-| 0 | 成功 |
-| 1-99 | 基础运行错误 |
-| 100-999 | 用户/认证相关 |
-| 1000-1999 | 用户业务错误 |
-| 2000-2999 | 订单业务错误 |
-| 3000+ | 其他业务模块 |
-
-## 配置管理
-
-配置通过 `app/core/config.py` 的 `Settings` 类管理，基于 `pydantic-settings` 从 `.env` 加载。
-
-关键配置项:
-- `DATABASE_URL`: 数据库连接 (默认 mysql://root:pass@127.0.0.1:3306/db)
-- `JWT_SECRET`: JWT 密钥 (生产环境必须修改)
-- `DEBUG`: 调试模式
+- 路由文件：`routers/<module>.py`，使用 `APIRouter`
+- 服务文件：`services/<module>.py`，使用 `<Module>Service` 类
+- 模型文件：`models/<module>.py`，继承 `tortoise.models.Model`
+- Schema 文件：`schemas/<module>.py`，继承 `pydantic.BaseModel`
 
 ## 扩展新模块
 
-1. `app/routers/module.py` - 创建路由（使用 ResponseBuilder 返回统一格式）
-2. `app/services/module.py` - 创建业务逻辑
-3. `app/schemas/module.py` - 创建数据模型
-4. 在 `app/main.py` 注册路由
-5. (可选) 使用 `ErrorCodeManager.register()` 注册业务错误码
+1. `app/routers/<module>.py` - 创建路由
+2. `app/services/<module>.py` - 创建业务逻辑
+3. `app/schemas/<module>.py` - 创建数据模型
+4. `app/models/<module>.py` - 创建数据库模型（如需要）
+5. 在 `app/main.py` 注册路由
 
-### 示例：LangChain 模块
+## AI 使用指引
 
-已创建的 LangChain 模块作为参考：
-- **routers/langchain.py**: AI 聊天、文本处理、RAG 查询接口
-- **services/langchain.py**: LangChain 服务封装 (Facade 门面层，负责转发指令)
-- **ai/**: 底层真正的 AI 业务流水线工厂（模型初始化、Prompts 管理、Chain 执行）
-- **schemas/langchain.py**: 聊天、文本处理、RAG 相关 Schema
+使用本项目的 AI 功能时：
 
-## 模块列表
+1. **了解架构**：AI 核心逻辑在 `app/ai/` 目录，服务层在 `app/services/langchain.py`
+2. **配置模型**：在 `app/ai/models.py` 中配置 LLM 实例
+3. **自定义 Prompt**：在 `app/ai/prompts.py` 中编辑提示词模板
+4. **调用接口**：通过 `/api/v1/langchain/*` 系列接口使用 AI 功能
 
-| 模块 | 路由前缀 | 说明 |
-|------|----------|------|
-| Hello | `/api/v1/hello` | Hello World 示例、响应格式演示 |
-| User | `/api/v1/users` | 用户 CRUD 示例 |
-| LangChain | `/api/v1/langchain` | AI 聊天、文本处理、RAG |
-| Article | `/api/v1/articles` | 文章资讯 CRUD |
-| Wechat | `/api/v1/wechat` | 微信相关接口 |
+## 变更记录 (Changelog)
+
+### 2026-04-07 - 项目初始化
+
+- 生成根级 CLAUDE.md 与模块级 CLAUDE.md
+- 创建 `.claude/index.json` 项目索引
+- 完善项目架构文档与模块说明
+
+### 之前版本
+
+详见 Git 提交历史
+
+## 覆盖率报告
+
+| 统计项 | 数值 |
+|--------|------|
+| 总文件数 | 45 |
+| 已扫描文件 | 45 |
+| 覆盖率 | 100% |
+| 模块数 | 9 |
+| 已生成文档模块 | 4 |
+
+**缺口清单**：
+- 缺少单元测试（推荐添加 pytest）
+- 部分模块未生成独立 CLAUDE.md
+
+## 下一步建议
+
+1. 为 `app/routers/`、`app/services/`、`app/models/`、`app/schemas/` 生成独立 CLAUDE.md
+2. 添加 pytest 测试框架与单元测试
+3. 配置 CI/CD 流程

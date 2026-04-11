@@ -1,39 +1,44 @@
-# 尝试加载 .env 文件中的环境变量
+# 尝试加载 .env 文件（可选，仅用于自定义配置）
 ifneq (,$(wildcard ./.env))
     include .env
     export
 endif
-
-# 服务器和远程路径配置，如果没有在 .env 中设置，将赋予空值
-SERVER ?= $(DEPLOY_USER)@$(DEPLOY_HOST)
-REMOTE_PATH ?= $(DEPLOY_PATH)
-CONTAINER ?= $(DEPLOY_CONTAINER)
 
 # 颜色输出
 GREEN = \033[0;32m
 RED = \033[0;31m
 NC = \033[0m # No Color
 
-.PHONY: help check-env deploy restart logs
+# 服务器配置：dev92 或 xiaoxi149
+DEPLOY_TARGET ?= xiaoxi149
+
+# 根据目标服务器设置配置
+ifeq ($(DEPLOY_TARGET),dev92)
+    SERVER = root@dev92
+    REMOTE_PATH = /www/wwwroot/fastapi-tp6/fastapi-tp6
+    CONTAINER = fastapi-tp6-app
+else ifeq ($(DEPLOY_TARGET),xiaoxi149)
+    SERVER = root@xiaoxi149
+    REMOTE_PATH = /www/wwwroot/fastapi-tp6-docker
+    CONTAINER = fastapi-tp6-app
+else
+    # 自定义配置
+    SERVER = $(DEPLOY_USER)@$(DEPLOY_HOST)
+    REMOTE_PATH = $(DEPLOY_PATH)
+    CONTAINER = $(DEPLOY_CONTAINER)
+endif
+
+.PHONY: help deploy restart logs
 
 help:
 	@echo "可用命令列表:"
-	@echo "  make deploy  - \033[0;32m同步代码到远程服务器并重启容器 (推荐)\033[0m"
-	@echo "  make restart - 仅在服务器上端重启容器"
-	@echo "  make logs    - 追踪服务器端 $(CONTAINER) 容器的日志"
+	@echo "  make deploy                     - \033[0;32m同步代码到默认服务器 (xiaoxi149) 并重启容器\033[0m"
+	@echo "  make deploy DEPLOY_TARGET=dev92 - \033[0;32m同步代码到 dev92 服务器\033[0m"
+	@echo "  make deploy DEPLOY_TARGET=xiaoxi149 - \033[0;32m同步代码到 xiaoxi149 服务器\033[0m"
+	@echo "  make restart                    - 重启默认服务器容器"
+	@echo "  make logs                       - 追踪服务器端容器日志"
 
-check-env:
-	@if [ -z "$(DEPLOY_USER)" ] || [ -z "$(DEPLOY_HOST)" ] || [ -z "$(DEPLOY_PATH)" ] || [ -z "$(DEPLOY_CONTAINER)" ]; then \
-		echo "$(RED)错误: .env 文件配置缺失！$(NC)"; \
-		echo "请务必在项目根目录的 .env 文件中添加如下配置："; \
-		echo "DEPLOY_USER=your-username"; \
-		echo "DEPLOY_HOST=your-server-ip"; \
-		echo "DEPLOY_PATH=/path/to/your/app"; \
-		echo "DEPLOY_CONTAINER=fastapi-tp6-app"; \
-		exit 1; \
-	fi
-
-deploy: check-env
+deploy:
 	@echo "$(GREEN)🚀 正在同步代码到 $(SERVER):$(REMOTE_PATH) ...$(NC)"
 	rsync -avz --delete \
 		--exclude '__pycache__' \
@@ -52,11 +57,11 @@ deploy: check-env
 	ssh $(SERVER) "cd $(REMOTE_PATH) && docker-compose up -d --build $(CONTAINER)"
 	@echo "$(GREEN)✅ 部署完成！$(NC)"
 
-restart: check-env
+restart:
 	@echo "$(GREEN)🔄 重启容器 $(CONTAINER)...$(NC)"
 	ssh $(SERVER) "cd $(REMOTE_PATH) && docker-compose restart $(CONTAINER)"
 	@echo "$(GREEN)✅ 重启完成！$(NC)"
 
-logs: check-env
+logs:
 	@echo "$(GREEN)📋 查看 $(CONTAINER) 日志 (按 Ctrl+C 退出)...$(NC)"
 	ssh $(SERVER) "cd $(REMOTE_PATH) && docker-compose logs -f $(CONTAINER)"

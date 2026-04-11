@@ -49,41 +49,62 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
             f"正文：\n{article.content}"
         )
 
-        # 3. 构造 Dify API 请求负载（极简高配版 - 根据 doc/difyapi 建议.md）
+        # 3. 构造 Dify API 请求负载
         payload = {
             "name": article.title,
             "text": dify_text,
             "indexing_technique": "high_quality",
 
-            # 使用标准文本分段（新闻资讯类扁平化数据的最优解）
-            "doc_form": "text_model",
+            # 使用标准文本分段模式
+            "doc_form": "hierarchical_model",
+            "doc_language": "Chinese Simplified",
 
             # 指定 Embedding 模型
-            "embedding_model_provider": "tongyi",
+            "embedding_model_provider": "langgenius/tongyi/tongyi",
             "embedding_model": "text-embedding-v4",
 
-            # 分段规则 - 极简高配版
+            # 分段规则 - 层级分段模式
             "process_rule": {
-                "mode": "automatic"
+                "mode": "hierarchical",
+                "rules": {
+                    # 预处理规则（必需）
+                    "pre_processing_rules": [
+                        {
+                            "id": "remove_extra_spaces",
+                            "enabled": True
+                        }
+                    ],
+                    # 父块分段规则
+                    "segmentation": {
+                        "separator": "[===CHUNK_SPLIT===]",
+                        "max_tokens": 2048
+                    },
+                    "parent_mode": "paragraph",
+                    # 子块分段规则
+                    "subchunk_segmentation": {
+                        "separator": "\n\n",
+                        "max_tokens": 512
+                    }
+                }
             },
 
             # 检索设置
             "retrieval_model": {
                 "search_method": "hybrid_search",
-                "top_k": 5,
+                "top_k": 15,
                 "score_threshold_enabled": True,
-                "score_threshold": 0.3,
+                "score_threshold": 0.4,
                 "reranking_enable": True,
                 "reranking_mode": "reranking_model",
                 "reranking_model": {
-                    "reranking_provider_name": "tongyi",
+                    "reranking_provider_name": "langgenius/tongyi/tongyi",
                     "reranking_model_name": "qwen3-rerank",
                 },
                 "weights": {
                     "weight_type": "semantic_first",
                     "vector_setting": {
                         "vector_weight": 0.7,
-                        "embedding_provider_name": "tongyi",
+                        "embedding_provider_name": "langgenius/tongyi/tongyi",
                         "embedding_model_name": "text-embedding-v4",
                     },
                     "keyword_setting": {"keyword_weight": 0.3},
@@ -91,10 +112,11 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
             },
         }
 
-        # 记录请求入参（脱敏）
+        # 记录请求入参（脱敏，去掉 text 字段）
+        payload_for_log = {k: v for k, v in payload.items() if k != "text"}
         logger.info("=> 请求 Dify API: 文章 ID=%s, 标题=%s", article.id, article.title[:50])
         logger.info("=> 请求负载大小：%d 字节", len(json.dumps(payload)))
-        logger.info("=> 完整 Payload: %s", json.dumps(payload, ensure_ascii=False, indent=2))
+        logger.info("=> 完整 Payload: %s", json.dumps(payload_for_log, ensure_ascii=False, indent=2))
 
         headers = {
             "Authorization": f"Bearer {settings.DIFY_API_KEY}",
@@ -131,7 +153,7 @@ async def sync_single_article(client: httpx.AsyncClient, article: ArticleNews) -
         return False
 
 
-async def run_sync_task(limit: int = 50) -> dict:
+async def run_sync_task(limit: int = 50, ids: list = None) -> dict:
     """
     执行批量同步的后台任务
 
@@ -139,15 +161,22 @@ async def run_sync_task(limit: int = 50) -> dict:
 
     Args:
         limit: 单次批量最大同步条数，默认 50
+        ids: 指定文章 ID 列表，如提供则忽略 limit 参数
 
     Returns:
         dict: 包含 total/success/failed 字段的统计结果
     """
-    # 查询未同步且未软删除的文章
-    articles = await ArticleNews.filter(
-        is_vector_synced=False,
-        delete_time=0,
-    ).limit(limit)
+    # 构建查询条件
+    query = ArticleNews.filter(delete_time=0)
+
+    if ids:
+        # 指定 ID 列表模式
+        query = query.filter(id__in=ids)
+    else:
+        # 批量同步模式：只查询未同步的
+        query = query.filter(is_vector_synced=False).limit(limit)
+
+    articles = await query
 
     if not articles:
         logger.info("当前没有需要同步的文章。")
@@ -168,3 +197,23 @@ async def run_sync_task(limit: int = 50) -> dict:
 
     logger.info("本批次同步完毕：成功 %d 篇，失败 %d 篇，共 %d 篇。", success, failed, total)
     return {"total": total, "success": success, "failed": failed}
+
+
+async def sync_single_article_by_id(article_id: int) -> bool:
+    """
+    根据 ID 同步单篇文章到 Dify 知识库
+
+    Args:
+        article_id: 文章 ID
+
+    Returns:
+        bool: 同步成功返回 True，失败返回 False
+    """
+    article = await ArticleNews.get_or_none(id=article_id, delete_time=0)
+
+    if not article:
+        logger.error("文章 ID=%s 不存在或已被删除", article_id)
+        return False
+
+    async with httpx.AsyncClient() as client:
+        return await sync_single_article(client, article)

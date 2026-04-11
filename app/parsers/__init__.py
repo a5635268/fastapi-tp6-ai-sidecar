@@ -177,6 +177,17 @@ async def parse_article(
         markdown = frontmatter + markdown
         markdown = clean_markdown(markdown)
 
+        # 图片信息提炼（VLM 处理）
+        from app.services.vlm_image import get_vlm_service
+        vlm_service = get_vlm_service()
+        if vlm_service and vlm_service.api_key:
+            try:
+                markdown = await vlm_service.clean_and_extract(markdown)
+            except Exception as e:
+                # VLM 处理失败不影响整体流程，仅记录日志
+                import logging
+                logging.getLogger(__name__).warning("[VLM] 图片处理失败，跳过 error=%s", e)
+
         # 构建结果
         meta = ArticleMeta(
             title=title,

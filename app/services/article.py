@@ -67,7 +67,7 @@ class ArticleService:
         as_text: bool = False
     ) -> ArticleFetchResponse:
         """
-        通用爬取
+        通用爬取（优先尝试精细解析）
 
         Args:
             url: 目标链接
@@ -76,16 +76,38 @@ class ArticleService:
 
         Returns:
             ArticleFetchResponse 爬取结果
+
+        解析优先级：
+        1. 优先尝试已注册的精细解析器（微信、赢商网、中购联）
+        2. 如果不支持，使用 GenericParser 通用爬取
         """
-        result: FetchResult = await fetch_url(url, proxy, as_text)
+        try:
+            # 优先尝试精细解析
+            result: ParseResult = await parse_article(url, proxy, use_generic=False)
+
+            if result.success:
+                # 精细解析成功，返回结构化数据
+                return ArticleFetchResponse(
+                    url=result.meta.url,
+                    html=result.content_html if not as_text else "",
+                    text=result.markdown if as_text else "",
+                    success=True,
+                    error=None,
+                    status_code=200,
+                )
+        except Exception:
+            pass
+
+        # 精细解析失败，降级使用通用爬取
+        fetch_result: FetchResult = await fetch_url(url, proxy, as_text)
 
         return ArticleFetchResponse(
-            url=result.url,
-            html=result.html if not as_text else "",
-            text=result.text if as_text else "",
-            success=result.success,
-            error=result.error,
-            status_code=result.status_code,
+            url=fetch_result.url,
+            html=fetch_result.html if not as_text else "",
+            text=fetch_result.text if as_text else "",
+            success=fetch_result.success,
+            error=fetch_result.error,
+            status_code=fetch_result.status_code,
         )
 
     @staticmethod

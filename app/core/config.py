@@ -88,7 +88,7 @@ class Settings(BaseSettings):
             "connections": {"default": db_config},
             "apps": {
                 "models": {
-                    "models": ["app.models.user", "app.models.article_news"],
+                    "models": ["app.models.user", "app.models.article_news", "app.models.wecom_msg_cursor"],
                     "default_connection": "default",
                 },
             },
@@ -197,6 +197,17 @@ class Settings(BaseSettings):
         if not self.DIFY_KB_DATASET_ID:
             raise ValueError("DIFY_KB_DATASET_ID 未配置，请在 .env 中设置")
         return f"{self.DIFY_API_URL}/datasets/{self.DIFY_KB_DATASET_ID}/document/create_by_text"
+
+    # Qwen-VL 配置
+    QWEN_API_KEY: Optional[str] = None
+    QWEN_MODEL: str = "qwen-vl-max-latest"
+
+    # 阿里云 OSS 配置
+    OSS_ENDPOINT: Optional[str] = None
+    OSS_BUCKET: Optional[str] = None
+    OSS_ACCESS_KEY_ID: Optional[str] = None
+    OSS_ACCESS_KEY_SECRET: Optional[str] = None
+    OSS_IMAGE_PREFIX: str = "article-images/"
 
     class Config:
         env_file = ".env"

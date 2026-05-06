@@ -3,6 +3,7 @@ FastAPI 应用主入口
 整个 ASGI 应用的引导程序与请求生命周期入口
 等价于 ThinkPHP6 的 public/index.php 或 Spring Boot 的主类
 """
+import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +17,16 @@ import os
 
 from app.core.config import settings
 from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
+from app.core.redis import RedisUtil
+from app.core.exceptions import (
+    LoginException,
+    AuthException,
+    PermissionException,
+    ServiceException,
+    ServiceWarning,
+    ModelValidatorException,
+)
+from app.middlewares.context_cleanup_middleware import add_context_cleanup_middleware
 from app.routers import hello, user, langchain, wechat, article, article_news
 
 # ==================== 配置全局日志 ====================
@@ -91,6 +102,10 @@ app = FastAPI(
 
 # ==================== 注册中间件 ====================
 
+# 上下文清理中间件（最早注册，最后执行）
+add_context_cleanup_middleware(app)
+
+# CORS 中间件
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 生产环境应限制具体域名
@@ -110,7 +125,108 @@ async def api_exception_handler(request: Request, exc: ApiException) -> JSONResp
     """
     return JSONResponse(
         status_code=exc.http_status,
-        content=ResponseBuilder.error(exc.code, exc.msg).model_dump()
+        content={
+            "code": exc.code,
+            "msg": exc.msg,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(LoginException)
+async def login_exception_handler(request: Request, exc: LoginException) -> JSONResponse:
+    """
+    登录异常处理器
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(AuthException)
+async def auth_exception_handler(request: Request, exc: AuthException) -> JSONResponse:
+    """
+    认证异常处理器
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(PermissionException)
+async def permission_exception_handler(request: Request, exc: PermissionException) -> JSONResponse:
+    """
+    权限异常处理器
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(ServiceException)
+async def service_exception_handler(request: Request, exc: ServiceException) -> JSONResponse:
+    """
+    服务异常处理器
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(ServiceWarning)
+async def service_warning_handler(request: Request, exc: ServiceWarning) -> JSONResponse:
+    """
+    服务警告处理器
+    """
+    return JSONResponse(
+        status_code=200,  # 警告返回 200，但 code 为 601
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
+    )
+
+
+@app.exception_handler(ModelValidatorException)
+async def model_validator_handler(request: Request, exc: ModelValidatorException) -> JSONResponse:
+    """
+    模型校验异常处理器
+    """
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "code": exc.code,
+            "msg": exc.message,
+            "time": int(time.time()),
+            "data": exc.data,
+        }
     )
 
 
@@ -169,6 +285,12 @@ async def startup_event():
     """应用启动时执行"""
     logger.info("应用启动：%s v%s", settings.APP_NAME, settings.APP_VERSION)
 
+    # === 初始化 Redis 连接 ===
+    try:
+        app.state.redis = await RedisUtil.create_redis_pool()
+    except Exception as e:
+        logger.warning("Redis 连接初始化失败: %s（Redis 功能将不可用）", e)
+
     # === 数据库连接配置日志，帮助排查云端 Docker 连接问题 ===
     try:
         db_config = settings.TORTOISE_ORM["connections"]["default"]
@@ -199,6 +321,12 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
+    # === 关闭 Redis 连接 ===
+    try:
+        await RedisUtil.close_redis_pool(app)
+    except Exception as e:
+        logger.warning("关闭 Redis 连接失败: %s", e)
+
     logger.info("应用已关闭")
 
 

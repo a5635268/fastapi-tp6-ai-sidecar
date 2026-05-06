@@ -4,11 +4,35 @@
 提供统一的 API 响应格式：{code, msg, time, data}
 """
 import time
+from collections.abc import Mapping
+from datetime import datetime
 from typing import Any, Generic, Optional, TypeVar
 
+from fastapi import status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
+
+from app.core.constants import HttpStatusConstant
 
 T = TypeVar("T")
+
+
+def _calculate_pages(total: int, page_size: int) -> int:
+    """
+    计算总页数（通用逻辑）
+
+    Args:
+        total: 总记录数
+        page_size: 每页数量
+
+    Returns:
+        int: 总页数
+    """
+    if page_size <= 0:
+        return 0
+    return (total + page_size - 1) // page_size
 
 
 # ==================== 错误码管理器 ====================
@@ -198,7 +222,7 @@ class ResponseBuilder:
         Returns:
             PaginatedResponse: 分页响应模型
         """
-        pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+        pages = _calculate_pages(total, page_size)
         return PaginatedResponse(
             code=0,
             msg=msg or ErrorCodeManager.get_msg(0),
@@ -315,6 +339,69 @@ class ResponseBuilder:
             msg=msg or "未知错误"
         )
 
+    @staticmethod
+    def too_many_requests(
+        msg: str = "请求过于频繁，请稍后再试",
+        data: Any = None,
+        headers: Optional[Mapping[str, str]] = None,
+        media_type: Optional[str] = None,
+        background: Optional[BackgroundTask] = None,
+    ) -> JSONResponse:
+        """
+        限流响应（HTTP 429）
+
+        Args:
+            msg: 错误消息
+            data: 附加数据
+            headers: 可选响应头
+            media_type: 响应媒体类型
+            background: 后台任务
+
+        Returns:
+            JSONResponse: 限流响应
+        """
+        result = {
+            'code': HttpStatusConstant.TOO_MANY_REQUESTS,
+            'msg': msg,
+            'time': int(time.time()),
+            'data': data,
+        }
+
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content=jsonable_encoder(result),
+            headers=headers,
+            media_type=media_type,
+            background=background,
+        )
+
+    @staticmethod
+    def streaming(
+        content: Any = None,
+        headers: Optional[Mapping[str, str]] = None,
+        media_type: str = "text/plain",
+        background: Optional[BackgroundTask] = None,
+    ) -> StreamingResponse:
+        """
+        流式响应
+
+        Args:
+            content: 流式内容（生成器或可迭代对象）
+            headers: 可选响应头
+            media_type: 响应媒体类型，默认 text/plain
+            background: 后台任务
+
+        Returns:
+            StreamingResponse: 流式响应
+        """
+        return StreamingResponse(
+            content=content,
+            status_code=status.HTTP_200_OK,
+            headers=headers,
+            media_type=media_type,
+            background=background,
+        )
+
 
 # ==================== 自定义异常 ====================
 
@@ -324,17 +411,19 @@ class ApiException(Exception):
     抛出后由全局异常处理器捕获并返回统一格式的响应
     """
 
-    def __init__(self, code: int, msg: str = ""):
+    def __init__(self, code: int, msg: str = "", data: Any = None):
         """
         初始化异常
 
         Args:
             code: 错误码
             msg: 自定义消息，为空则从 ErrorCodeManager 获取
+            data: 附加数据
         """
         self.code = code
         self.msg = msg or ErrorCodeManager.get_msg(code)
         self.http_status = ErrorCodeManager.get_http_status(code)
+        self.data = data
         super().__init__(self.msg)
 
 
@@ -359,3 +448,15 @@ def paginated(
 ) -> PaginatedResponse:
     """快捷函数：返回分页响应"""
     return ResponseBuilder.paginated(data, total, page, page_size, msg)
+
+
+__all__ = [
+    "ErrorCodeManager",
+    "ApiResponse",
+    "PaginatedResponse",
+    "ResponseBuilder",
+    "ApiException",
+    "success",
+    "error",
+    "paginated",
+]

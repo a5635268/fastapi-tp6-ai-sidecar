@@ -174,9 +174,23 @@ class Settings(BaseSettings):
         except Exception:
             return "test"
 
+    # CORS 配置
+    CORS_ORIGINS: str = ""  # 允许的跨域来源，多个用逗号分隔（如：https://example.com,https://admin.example.com）
+    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ALLOW_METHODS: str = "*"  # 允许的 HTTP 方法，多个用逗号分隔或使用 *
+    CORS_ALLOW_HEADERS: str = "*"  # 允许的请求头，多个用逗号分隔或使用 *
+    CORS_MAX_AGE: int = 600  # 预检请求缓存时间（秒）
+
     # Redis 配置
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    REDIS_DATABASE: int = 0        # Redis 数据库号，默认 0
+    REDIS_PASSWORD: Optional[str] = None  # Redis 密码，默认无密码
+    REDIS_USERNAME: Optional[str] = None  # Redis 用户名（Redis 6.0+ ACL）
+    REDIS_POOL_SIZE: int = 10      # 连接池大小
+    REDIS_POOL_MIN: int = 1        # 最小连接数
+    REDIS_SOCKET_TIMEOUT: int = 5  # Socket 操作超时（秒）
+    REDIS_CONNECT_TIMEOUT: int = 5 # 连接超时（秒）
 
     # JWT 配置
     JWT_SECRET: str = "your-secret-key-change-in-production"

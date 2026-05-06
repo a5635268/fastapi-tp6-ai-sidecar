@@ -13,6 +13,12 @@ tortoise-orm>=0.20.0
 aiomysql>=0.2.0    # MySQL 异步驱动
 asyncpg>=0.29.0   # PostgreSQL 异步驱动
 
+# 缓存
+redis>=4.5.0      # Redis 异步客户端（注解系统依赖）
+
+# Excel 处理
+openpyxl>=3.1.0   # Excel 导入导出工具
+
 # 安全认证
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4

@@ -2,11 +2,44 @@
 分页工具类
 适配 Tortoise ORM 的分页查询功能
 """
-from typing import Any, Dict, List, Optional, Tuple
-from tortoise.models import Model
+from typing import Any, Dict, List, Tuple
 from tortoise.queryset import QuerySet
 
 from app.core.response import PaginatedResponse
+
+
+def _calculate_pages(total: int, page_size: int) -> int:
+    """
+    计算总页数（通用逻辑，避免重复）
+
+    Args:
+        total: 总记录数
+        page_size: 每页数量
+
+    Returns:
+        int: 总页数
+    """
+    if page_size <= 0:
+        return 0
+    return (total + page_size - 1) // page_size
+
+
+def _validate_page_params(page: int, page_size: int) -> Tuple[int, int]:
+    """
+    校验并修正分页参数（通用逻辑）
+
+    Args:
+        page: 当前页码
+        page_size: 每页数量
+
+    Returns:
+        Tuple[int, int]: 修正后的 (page, page_size)
+    """
+    if page < 1:
+        page = 1
+    if page_size < 1:
+        page_size = 10
+    return page, page_size
 
 
 class PageUtil:
@@ -32,8 +65,11 @@ class PageUtil:
         Returns:
             Dict[str, Any]: 分页结果字典
         """
+        # 参数校验：使用通用逻辑
+        page, page_size = _validate_page_params(page, page_size)
+
         total = len(data_list)
-        pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+        pages = _calculate_pages(total, page_size)
 
         # 计算起始和结束索引
         start = (page - 1) * page_size
@@ -68,9 +104,12 @@ class PageUtil:
         Returns:
             Dict[str, Any]: 分页结果字典
         """
+        # 参数校验：使用通用逻辑
+        page, page_size = _validate_page_params(page, page_size)
+
         # 获取总数
         total = await queryset.count()
-        pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+        pages = _calculate_pages(total, page_size)
 
         # 计算偏移量
         offset = (page - 1) * page_size

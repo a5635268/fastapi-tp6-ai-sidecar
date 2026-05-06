@@ -24,7 +24,7 @@ class StringUtil:
             bool: 校验结果
         """
         if string is None:
-            return False
+            return True
         str_len = len(string)
         if str_len == 0:
             return True

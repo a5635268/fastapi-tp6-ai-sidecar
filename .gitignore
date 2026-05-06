@@ -19,6 +19,14 @@ test.db*
 .env.*
 !.env.example
 
+## Logs
+logs/
+*.log
+
+## Uploaded files (temporary storage)
+uploads/
+temp/
+
 .spec-workflow/
 
 ## IDE

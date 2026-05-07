@@ -382,7 +382,153 @@ make logs
 make restart
 ```
 
+## 测试
+
+### 测试基础设施
+
+项目采用 pytest 测试框架，支持异步测试、数据库集成、覆盖率报告。
+
+**测试依赖**：
+- `pytest>=8.0.0` - 测试框架核心
+- `pytest-asyncio>=0.23.0` - 异步测试支持（auto 模式）
+- `pytest-cov>=4.1.0` - 覆盖率报告
+- `httpx>=0.26.0` - 异步 HTTP 客户端（复用于测试）
+- `fakeredis>=2.20.0` - Redis Mock
+
+### 目录结构
+
+```
+tests/
+├── pytest.ini               # pytest 配置文件
+├── conftest.py              # 核心 fixtures（数据库、Redis、TestClient）
+├── README.md                # 测试运行指南
+├── unit/                    # 单元测试
+│   ├── test_core/          # 核心模块测试
+│   └── test_services/      # 服务层测试
+├── integration/             # 集成测试
+│   ├── test_routers/       # 路由层测试
+│   └── test_models/        # 模型层测试
+├── e2e/                     # 端到端测试
+└── fixtures/                # 测试数据 fixtures
+```
+
+### 运行测试
+
+```bash
+# 安装测试依赖
+uv pip install pytest pytest-asyncio pytest-cov httpx fakeredis
+
+# 运行所有测试
+pytest
+
+# 运行单元测试
+pytest tests/unit/ -m unit
+
+# 运行集成测试
+pytest tests/integration/ -m integration
+
+# 运行覆盖率报告
+pytest --cov=app --cov-report=html
+open htmlcov/index.html
+
+# 运行特定文件
+pytest tests/unit/test_core/test_response.py
+
+# 详细输出
+pytest -v
+
+# 并行执行（需要 pytest-xdist）
+pytest -n auto
+```
+
+### 测试约定
+
+#### 分层约定
+
+| 层级 | 标记 | 说明 | 依赖 |
+|------|------|------|------|
+| 单元测试 | `@pytest.mark.unit` | 快速、隔离、无外部依赖 | 无 |
+| 集成测试 | `@pytest.mark.integration` | 跨层交互、数据库/API | 数据库 |
+| E2E 测试 | `@pytest.mark.e2e` | 完整用户流程 | 全栈 |
+
+#### 命名约定
+
+- 测试文件：`test_<module>.py`
+- 测试类：`Test<Feature>`
+- 测试函数：`test_<scenario>`
+- Fixture 文件：`<module>_fixtures.py`
+
+#### 标记使用
+
+```python
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_db
+async def test_user_model():
+    ...
+
+@pytest.mark.unit
+def test_response_builder():
+    ...
+
+@pytest.mark.requires_redis
+async def test_cache_operations():
+    ...
+```
+
+### 覆盖率目标
+
+| 模块 | 目标覆盖率 | 说明 |
+|------|-----------|------|
+| 核心模块（core） | 95%+ | 基础设施，必须高覆盖 |
+| 服务层（services） | 80%+ | 业务逻辑核心 |
+| 路由层（routers） | 70%+ | HTTP 端点验证 |
+| 模型层（models） | 60%+ | ORM 操作验证 |
+| 工具类（utils） | 90%+ | 纯函数易测试 |
+
+### 测试数据库
+
+默认使用 SQLite 内存数据库（`:memory:`），无需外部依赖。
+
+```python
+# conftest.py
+await Tortoise.init(
+    db_url="sqlite://:memory:",
+    modules={"models": ["app.models.user", ...]}
+)
+```
+
+切换到 MySQL 测试数据库：
+
+```bash
+TEST_DATABASE_URL=mysql://user:pass@host:3306/test_db pytest
+```
+
+### 核心模块测试覆盖
+
+- **response.py** - ResponseBuilder、ErrorCodeManager、ApiException（95%+）
+- **exceptions.py** - LoginException、AuthException、ServiceException（95%+）
+
+### 集成测试示例
+
+- **hello 路由** - 统一响应格式验证
+- **user 模型** - CRUD 操作、唯一约束验证
+
 ## 变更记录 (Changelog)
+
+### 2026-05-07 - 测试基础设施
+
+- 新增 pytest 测试框架配置（pytest.ini）
+- 新增 tests/ 目录结构（unit/integration/e2e/fixtures）
+- 新增核心 fixtures（数据库初始化、Redis Mock、TestClient）
+- 新增单元测试：
+  - test_response.py - ResponseBuilder 与 ErrorCodeManager 测试
+  - test_exceptions.py - 自定义异常类测试
+- 新增集成测试：
+  - test_hello_router.py - Hello 路由端点测试
+  - test_user_model.py - User 模型 CRUD 测试
+- 更新 requirements.txt 添加测试依赖
+- 更新 CLAUDE.md 补充测试章节
 
 ### 2026-05-06 - 系统架构增强
 
@@ -439,13 +585,12 @@ make restart
 - app/command/ - 已生成 CLAUDE.md
 
 **缺口清单**：
-- 缺少单元测试（推荐添加 pytest）
 - 缺少 app/utils/ 模块级文档（工具函数分散，建议整合）
 
 ## 下一步建议
 
 1. 为 `app/utils/` 模块创建独立 CLAUDE.md（整合工具函数文档）
-2. 添加 pytest 测试框架与单元测试
-3. 配置 CI/CD 流程
-4. 完善注解系统的使用示例与最佳实践文档
-5. 补充 Redis 缓存策略与限流配置说明
+2. 配置 CI/CD 流程（GitHub Actions 或 GitLab CI）
+3. 完善注解系统的使用示例与最佳实践文档
+4. 补充 Redis 缓存策略与限流配置说明
+5. 扩展测试覆盖范围（AI 模块、Parser 模块）

@@ -42,3 +42,10 @@ lxml>=4.9.0
 # 图片处理
 oss2>=2.18.0         # 阿里云 OSS SDK
 pillow>=10.0.0       # 图片处理 (长图切片)
+
+# 测试框架
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+httpx>=0.26.0        # 已存在于 HTTP 客户端，复用于异步测试
+fakeredis>=2.20.0    # Redis Mock

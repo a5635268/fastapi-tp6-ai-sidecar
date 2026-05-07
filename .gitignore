@@ -35,3 +35,9 @@ temp/
 
 ## Claude Code
 .claude/
+
+## Test coverage (pytest-cov)
+.coverage
+.coverage.*
+htmlcov/
+*.cover

@@ -16,6 +16,9 @@ asyncpg>=0.29.0   # PostgreSQL 异步驱动
 # 缓存
 redis>=4.5.0      # Redis 异步客户端（注解系统依赖）
 
+# 任务队列
+arq>=0.25.0       # ARQ 异步任务队列（纯异步设计）
+
 # Excel 处理
 openpyxl>=3.1.0   # Excel 导入导出工具
 

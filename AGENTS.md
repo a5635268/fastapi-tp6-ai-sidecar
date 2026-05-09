@@ -1,12 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## 长期记忆
 
 本项目使用 Obsidian 作为长期记忆库。你随时可以使用obsidian cli获取和操作相关的文档。
 
 记忆路径：`/Users/mac/wwwroot/AI-Dev-Memory/Projects/fastapi-tp6-main/`
-obsidian cli的仓库名称：AI-Dev-Memory
-obsidian cli的使用手册：/Users/mac/wwwroot/AI-Dev-Memory/Obsidian-CLI使用指南.md
 
 开始重要工作前，必须先读取：
 1. `overview.md` - 了解项目当前状态

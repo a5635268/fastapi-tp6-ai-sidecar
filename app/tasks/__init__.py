@@ -8,4 +8,6 @@ ARQ 任务模块
 
 使用 ARQ (Async Redis Queue) 作为任务队列引擎。
 """
-# WorkerSettings 在 app/tasks/worker.py 中定义
+from app.tasks.worker import WorkerSettings
+
+__all__ = ["WorkerSettings"]

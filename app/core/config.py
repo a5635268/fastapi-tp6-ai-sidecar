@@ -192,6 +192,15 @@ class Settings(BaseSettings):
     REDIS_SOCKET_TIMEOUT: int = 5  # Socket 操作超时（秒）
     REDIS_CONNECT_TIMEOUT: int = 5 # 连接超时（秒）
 
+    # ARQ 任务队列配置
+    ARQ_JOB_TIMEOUT: int = 300           # 任务超时时间（秒）
+    ARQ_MAX_TRIES: int = 3               # 最大重试次数
+    ARQ_MAX_JOBS: int = 10               # Worker 最大处理任务数后重启
+    ARQ_POLL_DELAY: float = 0.5          # 轮询延迟（秒）
+    ARQ_KEEP_RESULT: int = 3600          # 结果保留时间（秒）
+    ARQ_EXPIRE_JOBS: int = 86400         # 任务过期时间（秒）
+    ARQ_WORKER_NAME: str = "arq-worker"  # Worker 名称前缀
+
     # JWT 配置
     JWT_SECRET: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"

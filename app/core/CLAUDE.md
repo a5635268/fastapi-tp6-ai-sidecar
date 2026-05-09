@@ -18,6 +18,8 @@
 | `config.py` | Pydantic Settings 配置管理，支持 MySQL/PostgreSQL 自动切换 |
 | `security.py` | JWT 认证、密码哈希工具 |
 | `response.py` | 统一响应格式、错误码管理、业务异常 |
+| `redis.py` | Redis 连接池管理，异步客户端 |
+| `arq.py` | ARQ 任务队列连接池管理（入队任务用） |
 
 ## 对外接口
 
@@ -31,6 +33,31 @@ settings.APP_NAME         # 应用名称
 settings.DATABASE_URL     # 数据库连接
 settings.JWT_SECRET       # JWT 密钥
 settings.TORTOISE_ORM     # Tortoise ORM 配置字典
+
+# Redis 配置
+settings.REDIS_HOST       # Redis 主机
+settings.REDIS_PORT       # Redis 端口
+settings.REDIS_DATABASE   # Redis 数据库号
+
+# ARQ 任务队列配置
+settings.ARQ_JOB_TIMEOUT  # 任务超时时间（秒）
+settings.ARQ_MAX_TRIES    # 最大重试次数
+settings.ARQ_MAX_JOBS     # Worker 最大处理任务数
+settings.ARQ_KEEP_RESULT  # 结果保留时间（秒）
+```
+
+### arq.py
+
+```python
+from app.core.arq import (
+    ArqUtil,              # ARQ 连接池管理类
+    get_arq_pool,         # 依赖注入函数（获取 ARQ 连接池）
+    init_arq_lifecycle    # 生命周期管理函数
+)
+
+# 使用示例
+arq_pool = ArqUtil.get_arq_pool()
+job = await arq_pool.enqueue_job('send_email', 'to@example.com', 'Subject', 'Body')
 ```
 
 ### security.py
@@ -72,6 +99,8 @@ raise ApiException(code=12)  # 资源不存在
 | `python-jose` | JWT 编解码 |
 | `passlib[bcrypt]` | 密码哈希 |
 | `bcrypt` | 密码加密算法 |
+| `redis` | Redis 异步客户端（缓存） |
+| `arq` | ARQ 异步任务队列 |
 
 ### 配置项
 
@@ -98,6 +127,22 @@ DB_ECHO: bool
 JWT_SECRET: str
 JWT_ALGORITHM: str
 ACCESS_TOKEN_EXPIRE_MINUTES: int
+
+# Redis 配置
+REDIS_HOST: str
+REDIS_PORT: int
+REDIS_DATABASE: int
+REDIS_PASSWORD: Optional[str]
+REDIS_POOL_SIZE: int
+
+# ARQ 任务队列配置
+ARQ_JOB_TIMEOUT: int      # 任务超时时间（秒）
+ARQ_MAX_TRIES: int        # 最大重试次数
+ARQ_MAX_JOBS: int         # Worker 最大处理任务数
+ARQ_POLL_DELAY: float     # 轮询延迟（秒）
+ARQ_KEEP_RESULT: int      # 结果保留时间（秒）
+ARQ_EXPIRE_JOBS: int      # 任务过期时间（秒）
+ARQ_WORKER_NAME: str      # Worker 名称前缀
 ```
 
 ## 数据模型
@@ -138,11 +183,18 @@ ErrorCodeManager.register(3001, "业务特定错误", 400)
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `config.py` | ~220 行 | 配置管理类 |
+| `config.py` | ~230 行 | 配置管理类（含 ARQ 配置） |
 | `security.py` | ~50 行 | 安全工具 |
 | `response.py` | ~360 行 | 响应封装 |
+| `redis.py` | ~180 行 | Redis 连接池管理 |
+| `arq.py` | ~80 行 | ARQ 连接池管理 |
 
 ## 变更记录 (Changelog)
+
+### 2026-05-09
+
+- 添加 ARQ 任务队列配置项
+- 更新文档，添加 `arq.py` 和 `redis.py` 说明
 
 ### 2026-04-07
 

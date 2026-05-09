@@ -18,6 +18,7 @@ import os
 from app.core.config import settings
 from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
 from app.core.redis import RedisUtil
+from app.core.arq import ArqUtil
 from app.core.exceptions import (
     LoginException,
     AuthException,
@@ -286,6 +287,12 @@ async def startup_event():
     except Exception as e:
         logger.warning("Redis 连接初始化失败: %s（Redis 功能将不可用）", e)
 
+    # === 初始化 ARQ 任务队列连接池 ===
+    try:
+        app.state.arq_pool = await ArqUtil.create_arq_pool()
+    except Exception as e:
+        logger.warning("ARQ 连接池初始化失败: %s（任务队列功能将不可用）", e)
+
     # === 数据库连接配置日志，帮助排查云端 Docker 连接问题 ===
     try:
         db_config = settings.TORTOISE_ORM["connections"]["default"]
@@ -316,6 +323,12 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
+    # === 关闭 ARQ 任务队列连接池 ===
+    try:
+        await ArqUtil.close_arq_pool()
+    except Exception as e:
+        logger.warning("关闭 ARQ 连接池失败: %s", e)
+
     # === 关闭 Redis 连接 ===
     try:
         await RedisUtil.close_redis_pool(app)

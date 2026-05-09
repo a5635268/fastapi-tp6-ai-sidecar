@@ -15,6 +15,7 @@ from tortoise import Tortoise
 
 from app.main import app
 from app.core.redis import RedisUtil
+from app.core.arq import ArqUtil
 
 
 # ==================== 事件循环配置 ====================
@@ -115,6 +116,61 @@ async def redis_mock() -> AsyncGenerator[aioredis.FakeRedis, None]:
 
     # 清理 Mock 连接
     RedisUtil._redis = None
+
+
+# ==================== ARQ fixtures ====================
+
+@pytest.fixture
+async def arq_pool():
+    """
+    ARQ 连接池 fixture（真实 Redis）
+
+    使用真实 Redis 连接池进行集成测试。
+    使用 Redis 测试数据库（database=15）避免与生产数据冲突。
+
+    标记：@pytest.mark.integration, @pytest.mark.requires_redis
+    """
+    from arq import create_pool
+    from arq.connections import RedisSettings
+
+    # 使用测试数据库（database=15）
+    settings = RedisSettings(
+        host="localhost",
+        port=6379,
+        database=15,
+    )
+
+    pool = await create_pool(settings)
+
+    yield pool
+
+    await pool.close()
+
+
+@pytest.fixture
+def mock_arq_pool():
+    """
+    ARQ 连接池 Mock fixture（无 Redis 依赖）
+
+    用于单元测试中验证任务入队逻辑，不依赖真实 Redis。
+
+    Example:
+        >>> def test_enqueue_task(mock_arq_pool):
+        ...     job = await mock_arq_pool.enqueue_job('send_email', ...)
+        ...     assert job.job_id == 'test-job-id'
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    pool = MagicMock()
+    pool.enqueue_job = AsyncMock()
+    pool.info = AsyncMock()
+
+    # 模拟 job 对象
+    mock_job = MagicMock()
+    mock_job.job_id = "test-job-id"
+    pool.enqueue_job.return_value = mock_job
+
+    return pool
 
 
 # ==================== TestClient fixtures ====================

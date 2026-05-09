@@ -11,7 +11,12 @@ fastapi-tp6/
 │   ├── core/
 │   │   ├── config.py        # Pydantic 配置管理
 │   │   ├── security.py      # JWT、密码哈希等安全功能
-│   │   └── response.py      # 统一响应格式封装
+│   │   ├── response.py      # 统一响应格式封装
+│   │   └── arq.py           # ARQ 连接池管理
+│   ├── tasks/               # ARQ 异步任务队列
+│   │   ├── worker.py        # WorkerSettings 配置
+│   │   ├── functions/       # 任务函数（邮件、报表等）
+│   │   └── cron/            # Cron 定时任务
 │   ├── ai/                  # AI 核心子系统 (领域层)
 │   │   ├── models.py        # LLM 工厂初始化
 │   │   ├── prompts.py       # 系统提示词管理
@@ -31,6 +36,13 @@ fastapi-tp6/
 │   └── schemas/
 │       ├── __init__.py      # Pydantic 数据校验模型
 │       └── langchain.py     # LangChain 数据校验模型
+├── workers/
+│   └── run_worker.py        # ARQ Worker 启动脚本
+├── tests/                   # pytest 测试框架
+│   ├── conftest.py          # 测试 fixtures
+│   ├── tasks/               # ARQ 任务测试
+│   ├── unit/                # 单元测试
+│   └── integration/         # 集成测试
 ├── .venv/                   # Python 虚拟环境（uv 管理）
 ├── pyproject.toml           # 项目依赖与配置
 ├── uv.lock                  # 依赖锁定文件
@@ -78,7 +90,7 @@ cp .env.example .env
 ### 3. 运行应用
 
 ```bash
-# 方式 1：使用 uv run 运行（推荐） kill -9 $(lsof -t -i:8000)
+# 方式 1：使用 uv run 运行（推荐）
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 方式 2：激活虚拟环境后运行
@@ -89,7 +101,20 @@ uvicorn app.main:app --reload
 uv run python -m uvicorn app.main:app --reload
 ```
 
-### 4. 访问接口
+### 4. 启动 ARQ Worker（异步任务队列）
+
+```bash
+# 开发环境（前台运行）
+python workers/run_worker.py
+
+# 后台运行
+nohup python workers/run_worker.py > logs/worker.log 2>&1 &
+
+# 生产环境（使用 systemd 管理）
+sudo systemctl start arq-worker
+```
+
+### 5. 访问接口
 
 | 接口 | 地址 |
 |------|------|
@@ -418,6 +443,8 @@ class Command:
 - **安全认证**: python-jose, passlib[bcrypt]
 - **数据库**: MySQL （支持全异步驱动）
 - **AI 框架**: LangChain >= 0.3.0
+- **任务队列**: ARQ >= 0.25.0 （纯异步设计）
+- **缓存**: Redis （连接池管理）
 
 ## 开发建议
 
@@ -453,6 +480,76 @@ class Command:
    def get_llm(model_name: str = "gpt-3.5-turbo"):
        return ChatOpenAI(model=model_name, temperature=0.7)
    ```
+
+## ARQ 异步任务队列
+
+本项目集成 ARQ (Async Redis Queue) 异步任务队列，支持任务异步执行、延时任务、定时任务和失败重试。
+
+### 任务入队
+
+在 FastAPI 路由或服务中入队任务：
+
+```python
+from app.core.arq import get_arq_pool
+
+async def send_notification(user_id: int):
+    arq_pool = await get_arq_pool()
+
+    # 立即执行
+    job = await arq_pool.enqueue_job("send_email", user_id, "通知标题", "通知内容")
+
+    # 延时执行（60 秒后）
+    job = await arq_pool.enqueue_job("send_email", user_id, "通知标题", "通知内容", _defer=60)
+
+    return job.job_id
+```
+
+### 任务函数定义
+
+在 `app/tasks/functions/` 中定义任务函数：
+
+```python
+from arq import Retry
+
+async def send_email(ctx, to: str, subject: str, body: str, retry_count: int = 0):
+    try:
+        # 执行发送逻辑
+        result = await _send_email_impl(to, subject, body)
+        return {"success": True, "to": to}
+    except Exception as e:
+        if retry_count < 3:
+            raise Retry(defer=2 ** retry_count)  # 指数退避
+        return {"success": False, "error": str(e)}
+```
+
+### Cron 定时任务
+
+在 `app/tasks/cron/scheduled.py` 中定义定时任务：
+
+```python
+async def health_check(ctx):
+    # 健康检查逻辑
+    return {"status": "healthy"}
+```
+
+### Worker 配置
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `ARQ_JOB_TIMEOUT` | 300 | 任务超时时间（秒） |
+| `ARQ_MAX_TRIES` | 3 | 最大重试次数 |
+| `ARQ_MAX_JOBS` | 10 | Worker 最大处理任务数后重启 |
+| `ARQ_POLL_DELAY` | 0.5 | 轮询延迟（秒） |
+| `ARQ_KEEP_RESULT` | 3600 | 结果保留时间（秒） |
+| `ARQ_EXPIRE_JOBS` | 86400 | 任务过期时间（秒） |
+| `ARQ_WORKER_NAME` | arq-worker | Worker 名称前缀 |
+
+### 示例任务
+
+- `send_email` - 发送单个邮件（支持重试）
+- `send_bulk_emails` - 批量发送邮件
+- `generate_report` - 生成报表
+- `health_check` - Cron 健康检查（每 5 分钟）
 
 ## 一键部署 (基于 Makefile 与 Docker)
 

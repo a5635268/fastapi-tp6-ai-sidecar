@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-> 最后更新：2026-05-06
+> 最后更新：2026-05-09
 
 ## 项目概述
 
-基于《企业级项目目录规范与多应用路由网关架构》构建的 FastAPI 企业级项目模板，采用 MVC 分层架构，支持多应用模块化路由。
+基于 FastAPI + LangChain 的企业级 AI 应用模板，采用 MVC 分层架构，支持 AI 聊天、文本处理、RAG 检索等功能。保留了基础设施模块和 AI/LangChain 核心模块，已删除业务 CRUD 和爬虫解析器模块。
 
 **技术栈**：FastAPI + Pydantic + Tortoise ORM + LangChain + Redis
 
@@ -17,24 +17,11 @@ graph TD
     end
 
     subgraph Gateway["路由网关层 app/routers/"]
-        Hello[hello.py]
-        User[user.py]
         LangChain[langchain.py]
-        Wechat[wechat.py]
-        Article[article.py]
-        ArticleNews[article_news.py]
     end
 
     subgraph Service["业务服务层 app/services/"]
-        HelloSvc[hello.py]
-        UserSvc[user.py]
         LangChainSvc[langchain.py]
-        WechatSvc[wechat.py]
-        ArticleSvc[article.py]
-        ArticleNewsSvc[article_news.py]
-        DifySvc[dify_sync.py]
-        VlmSvc[vlm_image.py]
-        OssSvc[oss_image.py]
     end
 
     subgraph Domain["领域层 app/ai/"]
@@ -45,18 +32,8 @@ graph TD
         Prompts[prompts.py]
     end
 
-    subgraph Parser["解析器模块 app/parsers/"]
-        BaseParser[base.py]
-        WechatParser[wechat.py]
-        WinshangParser[winshang.py]
-        MallChinaParser[mallchina.py]
-        GenericParser[generic.py]
-        VlmPrompt[vlm_prompt.py]
-    end
-
     subgraph Data["数据层"]
-        Models[app/models/]
-        Schemas[app/schemas/]
+        Schemas[app/schemas/langchain.py]
         DB[(MySQL/PostgreSQL)]
     end
 
@@ -87,13 +64,11 @@ graph TD
     Gateway --> Annotation
     Gateway --> Middleware
     Service --> Domain
-    Service --> Parser
     Service --> Data
     Data --> DB
     Gateway --> Core
     Service --> Core
     Domain --> Core
-    Parser --> Core
     Annotation --> Core
     Annotation --> Redis
 
@@ -101,7 +76,6 @@ graph TD
     style Gateway fill:#fff4e1
     style Service fill:#f0f9e8
     style Domain fill:#fce4ec
-    style Parser fill:#f3e5f5
     style Data fill:#e8f5e9
     style Core fill:#ffebee
     style Annotation fill:#fff9e6
@@ -113,17 +87,14 @@ graph TD
 | 模块 | 路径 | 职责 | CLAUDE.md |
 |------|------|------|-----------|
 | 根模块 | `/` | 应用引导、路由注册、中间件配置 | [CLAUDE.md](./CLAUDE.md) |
-| 核心模块 | `app/core/` | 配置管理、安全认证、统一响应、Redis、常量、异常 | [CLAUDE.md](./app/core/CLAUDE.md) |
+| 核心模块 | `app/core/` | 配置管理、安全认证、统一响应、Redis、常量、异常、上下文 | [CLAUDE.md](./app/core/CLAUDE.md) |
 | 注解系统 | `app/annotations/` | 缓存注解、限流注解、日志注解 | [CLAUDE.md](./app/annotations/CLAUDE.md) |
 | 中间件 | `app/middlewares/` | 上下文清理、CORS、GZIP 压缩 | [CLAUDE.md](./app/middlewares/CLAUDE.md) |
-| AI 模块 | `app/ai/` | 聊天对话、文本处理、RAG 检索 | [CLAUDE.md](./app/ai/CLAUDE.md) |
-| 路由控制器 | `app/routers/` | HTTP 请求处理与路由分发 | [CLAUDE.md](./app/routers/CLAUDE.md) |
-| 业务服务 | `app/services/` | 业务逻辑、第三方集成 | [CLAUDE.md](./app/services/CLAUDE.md) |
-| 数据模型 | `app/models/` | Tortoise ORM 数据库模型 | [CLAUDE.md](./app/models/CLAUDE.md) |
-| 数据契约 | `app/schemas/` | Pydantic 请求/响应校验 | [CLAUDE.md](./app/schemas/CLAUDE.md) |
-| 文章解析器 | `app/parsers/` | 多网站文章解析策略 | [CLAUDE.md](./app/parsers/CLAUDE.md) |
-| 命令行 | `app/command/` | CLI 命令与后台任务 | [CLAUDE.md](./app/command/CLAUDE.md) |
-| 知识存储 | `docs/solutions/` | 文档化的问题解决方案（bugs、最佳实践），按类别组织，YAML frontmatter 标记 | - |
+| AI 模块 | `app/ai/` | 聊天对话、文本处理、RAG 检索、模型工厂、提示词管理 | [CLAUDE.md](./app/ai/CLAUDE.md) |
+| 路由控制器 | `app/routers/` | LangChain HTTP 请求处理与路由分发 | [CLAUDE.md](./app/routers/CLAUDE.md) |
+| 业务服务 | `app/services/` | LangChain 业务逻辑转发 | [CLAUDE.md](./app/services/CLAUDE.md) |
+| 数据契约 | `app/schemas/` | LangChain Pydantic 请求/响应校验 | [CLAUDE.md](./app/schemas/CLAUDE.md) |
+| 测试框架 | `tests/` | pytest 测试基础设施与单元/集成测试 | [README.md](./tests/README.md) |
 
 ## 模块结构图
 
@@ -137,10 +108,9 @@ graph TD
     App --> AI["ai"];
     App --> Routers["routers"];
     App --> Services["services"];
-    App --> Models["models"];
     App --> Schemas["schemas"];
-    App --> Parsers["parsers"];
-    App --> Command["command"];
+    
+    Root --> Tests["tests/"];
     
     Core --> CoreConfig["config.py"];
     Core --> CoreSecurity["security.py"];
@@ -164,42 +134,25 @@ graph TD
     AI --> AIModels["models.py"];
     AI --> AIPrompts["prompts.py"];
     
-    Routers --> RHello["hello.py"];
-    Routers --> RUser["user.py"];
     Routers --> RLangChain["langchain.py"];
-    Routers --> RWechat["wechat.py"];
-    Routers --> RArticle["article.py"];
-    Routers --> RArticleNews["article_news.py"];
     
-    Services --> SHello["hello.py"];
-    Services --> SUser["user.py"];
     Services --> SLangChain["langchain.py"];
-    Services --> SWechat["wechat.py"];
-    Services --> SArticle["article.py"];
-    Services --> SArticleNews["article_news.py"];
-    Services --> SDify["dify_sync.py"];
-    Services --> SVlm["vlm_image.py"];
-    Services --> SOss["oss_image.py"];
     
-    Models --> MUser["user.py"];
-    Models --> MArticle["article_news.py"];
-    Models --> MWecomCursor["wecom_msg_cursor.py"];
+    Schemas --> SchemaLangChain["langchain.py"];
     
-    Parsers --> PBase["base.py"];
-    Parsers --> PWechat["wechat.py"];
-    Parsers --> PWinshang["winshang.py"];
-    Parsers --> PMallChina["mallchina.py"];
-    Parsers --> PGeneric["generic.py"];
-    Parsers --> PVlmPrompt["vlm_prompt.py"];
+    Tests --> TConftest["conftest.py"];
+    Tests --> TUnit["unit/"];
+    Tests --> TIntegration["integration/"];
+    Tests --> TE2e["e2e/"];
+    Tests --> TFixtures["fixtures/"];
 
     click CoreConfig "./app/core/CLAUDE.md" "查看核心模块文档"
     click AnnoCache "./app/annotations/CLAUDE.md" "查看注解系统文档"
     click MidContextCleanup "./app/middlewares/CLAUDE.md" "查看中间件文档"
     click AIChat "./app/ai/CLAUDE.md" "查看 AI 模块文档"
-    click RHello "./app/routers/CLAUDE.md" "查看路由模块文档"
-    click SHello "./app/services/CLAUDE.md" "查看服务模块文档"
-    click MUser "./app/models/CLAUDE.md" "查看模型模块文档"
-    click PBase "./app/parsers/CLAUDE.md" "查看解析器模块文档"
+    click RLangChain "./app/routers/CLAUDE.md" "查看路由模块文档"
+    click SLangChain "./app/services/CLAUDE.md" "查看服务模块文档"
+    click SchemaLangChain "./app/schemas/CLAUDE.md" "查看 Schema 模块文档"
 ```
 
 ## 运行与开发
@@ -236,21 +189,23 @@ cp .env.example .env
 - `JWT_SECRET`: JWT 密钥（生产环境必须修改）
 - `DEBUG`: 调试模式
 - `REDIS_HOST/REDIS_PORT`: Redis 连接配置
-- `DIFY_API_KEY`: Dify API 密钥（可选）
-- `DIFY_KB_DATASET_ID`: Dify 知识库 ID（可选）
-- `QWEN_API_KEY`: Qwen-VL API 密钥（图片信息提炼）
-- `OSS_ENDPOINT/OSS_BUCKET`: 阿里云 OSS 配置（图片存储）
+- `OPENAI_API_KEY`: OpenAI API 密钥（可选）
 
 ## API 路由总览
 
 | 路由前缀 | 模块 | 说明 |
 |----------|------|------|
-| `/api/v1/hello` | Hello | Hello World 示例、统一响应演示 |
-| `/api/v1/users` | User | 用户 CRUD 操作 |
-| `/api/v1/langchain` | LangChain | AI 聊天、文本处理、RAG 查询 |
-| `/api/v1/wechat` | Wechat | 微信公众号文章解析 |
-| `/api/v1/articles` | Article | 文章解析与爬取 |
-| `/api/v1/article` | ArticleNews | 资讯文章 CRUD 与向量同步 |
+| `/api/v1/langchain` | LangChain | AI 聊天、文本处理、RAG 查询、模型列表 |
+
+### LangChain API 接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/langchain/chat` | AI 聊天接口 |
+| POST | `/api/v1/langchain/process` | 文本处理接口（摘要、翻译、提取等） |
+| POST | `/api/v1/langchain/rag/query` | RAG 检索查询接口 |
+| GET | `/api/v1/langchain/models` | 获取支持的模型列表 |
+| GET | `/api/v1/langchain/` | LangChain 模块状态检查 |
 
 ## 统一响应格式
 
@@ -316,19 +271,17 @@ async def do_login(username: str):
 | 层级 | 目录 | 职责 |
 |------|------|------|
 | Controller | `app/routers/` | HTTP 请求参数处理、委派业务层、返回响应 |
-| Service | `app/services/` | 核心业务逻辑、事务处理、第三方集成 |
+| Service | `app/services/` | 业务逻辑编排、转发请求到 Domain 层 |
 | Domain | `app/ai/` | AI 领域逻辑、流水线工厂 |
-| Model | `app/models/` | 数据库表结构映射（Tortoise ORM） |
 | Schema | `app/schemas/` | 请求/响应数据校验（Pydantic） |
-| Parser | `app/parsers/` | 文章解析策略（策略模式） |
 | Annotation | `app/annotations/` | 装饰器增强（缓存、限流、日志） |
 | Middleware | `app/middlewares/` | 中间件（上下文清理、CORS、GZIP） |
+| Core | `app/core/` | 基础设施（配置、响应、安全、Redis） |
 
 ### 命名约定
 
 - 路由文件：`routers/<module>.py`，使用 `APIRouter`
 - 服务文件：`services/<module>.py`，使用 `<Module>Service` 类
-- 模型文件：`models/<module>.py`，继承 `tortoise.models.Model`
 - Schema 文件：`schemas/<module>.py`，继承 `pydantic.BaseModel`
 
 ## 扩展新模块
@@ -336,15 +289,14 @@ async def do_login(username: str):
 1. `app/routers/<module>.py` - 创建路由
 2. `app/services/<module>.py` - 创建业务逻辑
 3. `app/schemas/<module>.py` - 创建数据模型
-4. `app/models/<module>.py` - 创建数据库模型（如需要）
-5. 在 `app/main.py` 注册路由
+4. 在 `app/main.py` 注册路由
 
 ## AI 使用指引
 
 使用本项目的 AI 功能时：
 
 1. **了解架构**：AI 核心逻辑在 `app/ai/` 目录，服务层在 `app/services/langchain.py`
-2. **配置模型**：在 `app/ai/models.py` 中配置 LLM 实例
+2. **配置模型**：在 `app/ai/models.py` 中配置 LLM 实例（当前使用 FakeListChatModel 演示）
 3. **自定义 Prompt**：在 `app/ai/prompts.py` 中编辑提示词模板
 4. **调用接口**：通过 `/api/v1/langchain/*` 系列接口使用 AI 功能
 
@@ -483,20 +435,11 @@ async def test_cache_operations():
 | 核心模块（core） | 95%+ | 基础设施，必须高覆盖 |
 | 服务层（services） | 80%+ | 业务逻辑核心 |
 | 路由层（routers） | 70%+ | HTTP 端点验证 |
-| 模型层（models） | 60%+ | ORM 操作验证 |
-| 工具类（utils） | 90%+ | 纯函数易测试 |
+| AI 模块（ai） | 60%+ | AI 流水线验证 |
 
 ### 测试数据库
 
-默认使用 SQLite 内存数据库（`:memory:`），无需外部依赖。
-
-```python
-# conftest.py
-await Tortoise.init(
-    db_url="sqlite://:memory:",
-    modules={"models": ["app.models.user", ...]}
-)
-```
+默认使用 SQLite 文件数据库，无需外部依赖。
 
 切换到 MySQL 测试数据库：
 
@@ -504,29 +447,24 @@ await Tortoise.init(
 TEST_DATABASE_URL=mysql://user:pass@host:3306/test_db pytest
 ```
 
-### 核心模块测试覆盖
-
-- **response.py** - ResponseBuilder、ErrorCodeManager、ApiException（95%+）
-- **exceptions.py** - LoginException、AuthException、ServiceException（95%+）
-
-### 集成测试示例
-
-- **hello 路由** - 统一响应格式验证
-- **user 模型** - CRUD 操作、唯一约束验证
-
 ## 变更记录 (Changelog)
+
+### 2026-05-09 - 项目精简与 AI 上下文初始化
+
+- 删除业务 CRUD 模块（user、article、wechat）
+- 删除爬虫解析器模块（parsers）
+- 删除业务数据模型（models）
+- 保留基础设施模块（core、annotations、middlewares）
+- 保留 AI/LangChain 核心模块（ai、routers/langchain、services/langchain、schemas/langchain）
+- 保留测试框架（tests）
+- 更新根级 CLAUDE.md 与模块级 CLAUDE.md
+- 创建 .claude/index.json 项目索引
 
 ### 2026-05-07 - 测试基础设施
 
 - 新增 pytest 测试框架配置（pytest.ini）
 - 新增 tests/ 目录结构（unit/integration/e2e/fixtures）
 - 新增核心 fixtures（数据库初始化、Redis Mock、TestClient）
-- 新增单元测试：
-  - test_response.py - ResponseBuilder 与 ErrorCodeManager 测试
-  - test_exceptions.py - 自定义异常类测试
-- 新增集成测试：
-  - test_hello_router.py - Hello 路由端点测试
-  - test_user_model.py - User 模型 CRUD 测试
 - 更新 requirements.txt 添加测试依赖
 - 更新 CLAUDE.md 补充测试章节
 
@@ -540,57 +478,50 @@ TEST_DATABASE_URL=mysql://user:pass@host:3306/test_db pytest
   - 新增 redis.py：Redis 连接池管理
   - 新增 context.py：请求上下文管理
 - 新增配置项：
-  - Qwen-VL 配置（图片信息提炼）
-  - 阿里云 OSS 配置（图片存储）
   - Redis 详细配置（连接池、超时）
-- 新增服务：
-  - vlm_image.py：VLM 图片处理服务
-  - oss_image.py：OSS 图片上传服务
-- 新增模型：wecom_msg_cursor.py（企微消息游标）
-- 新增解析器：vlm_prompt.py（VLM 提示词）
-- 新增 schema：vlm.py（VLM 数据校验）
 - 更新依赖：新增 Redis、openpyxl、oss2、pillow 等
 - 生成模块级 CLAUDE.md 文档
 
 ### 2026-04-07 - 项目初始化
 
 - 生成根级 CLAUDE.md 与模块级 CLAUDE.md
-- 创建 `.claude/index.json` 项目索引
+- 创建 .claude/index.json 项目索引
 - 完善项目架构文档与模块说明
-
-### 之前版本
-
-详见 Git 提交历史
 
 ## 覆盖率报告
 
 | 统计项 | 数值 |
 |--------|------|
-| 总文件数 | 68 |
-| 已扫描文件 | 68 |
+| 总文件数 | 40 |
+| 已扫描文件 | 40 |
 | 覆盖率 | 100% |
-| 模块数 | 12 |
-| 已生成文档模块 | 12 |
+| 模块数 | 10 |
+| 已生成文档模块 | 10 |
+| 测试覆盖率 | 37% |
+| 测试通过 | 73 passed |
 
 **模块清单**：
-- app/core/ - 已生成 CLAUDE.md
-- app/annotations/ - 已生成 CLAUDE.md（新增）
-- app/middlewares/ - 已生成 CLAUDE.md（新增）
-- app/ai/ - 已生成 CLAUDE.md
-- app/routers/ - 已生成 CLAUDE.md
-- app/services/ - 已生成 CLAUDE.md
-- app/models/ - 已生成 CLAUDE.md
-- app/schemas/ - 已生成 CLAUDE.md
-- app/parsers/ - 已生成 CLAUDE.md
-- app/command/ - 已生成 CLAUDE.md
+- app/core/ - 已生成 CLAUDE.md ✅
+- app/annotations/ - 已生成 CLAUDE.md ✅
+- app/middlewares/ - 已生成 CLAUDE.md ✅
+- app/ai/ - 已生成 CLAUDE.md ✅
+- app/routers/ - 已生成 CLAUDE.md ✅
+- app/services/ - 已生成 CLAUDE.md ✅
+- app/schemas/ - 已生成 CLAUDE.md ✅
+- app/command/ - 已生成 CLAUDE.md ✅
+- app/models/ - 已生成 CLAUDE.md ✅（空模块）
+- app/utils/ - 已生成 CLAUDE.md ✅
+
+**已生成 Mermaid 结构图** ✅
 
 **缺口清单**：
-- 缺少 app/utils/ 模块级文档（工具函数分散，建议整合）
+- 无缺口，所有模块均已生成文档
 
 ## 下一步建议
 
-1. 为 `app/utils/` 模块创建独立 CLAUDE.md（整合工具函数文档）
-2. 配置 CI/CD 流程（GitHub Actions 或 GitLab CI）
-3. 完善注解系统的使用示例与最佳实践文档
-4. 补充 Redis 缓存策略与限流配置说明
-5. 扩展测试覆盖范围（AI 模块、Parser 模块）
+1. 配置真实 LLM 提供商（替换 FakeListChatModel）
+2. 扩展 AI 模块功能（添加更多文本处理任务）
+3. 配置 CI/CD 流程（GitHub Actions 或 GitLab CI）
+4. 完善注解系统的使用示例与最佳实践文档
+5. 补充 Redis 缓存策略与限流配置说明
+6. 扩展测试覆盖范围（AI 模块、注解系统）

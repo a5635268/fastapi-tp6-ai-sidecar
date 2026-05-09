@@ -2,51 +2,46 @@
 
 # Command 模块 CLAUDE.md
 
-> 最后更新：2026-04-07
+> 最后更新：2026-05-09
 
 ## 模块职责
 
 命令行模块，提供：
-- CLI 命令实现
-- 后台任务调度
-- 数据同步任务
+- CLI 命令实现框架
+- 测试命令示例
 
 ## 入口与启动
 
 | 文件 | 功能 | 说明 |
 |------|------|------|
-| `sync_vector.py` | 向量知识库同步命令 | 同步文章到 Dify 向量库 |
-| `test.py` | 测试命令 | 测试用途 |
+| `test.py` | 测试命令 | 基础命令示例，演示异步执行 |
 
 ## 对外接口
 
-### sync_vector.py
+### 命令类模式
 
 ```python
-# 同步单篇文章到向量库
-from app.services.dify_sync import sync_single_article
+from app.command.test import Command
 
-async with httpx.AsyncClient() as client:
-    success = await sync_single_article(client, article)
+# 创建命令实例
+cmd = Command()
+
+# 执行命令
+await cmd.execute("arg1", "arg2")
 ```
 
-### 后台任务模式
+### 命令结构
 
-在路由中提交后台任务：
+每个命令类需定义：
 
 ```python
-from fastapi import BackgroundTasks
-
-@router.post("/{article_id}/sync-vector")
-async def sync_article(article_id: int, background_tasks: BackgroundTasks):
-    article = await service.get_by_id(article_id)
+class Command:
+    name = "command_name"  # 命令名称
+    description = "命令描述"
     
-    async def _do_sync():
-        async with httpx.AsyncClient() as client:
-            await sync_single_article(client, article)
-    
-    background_tasks.add_task(_do_sync)
-    return {"message": "同步任务已提交"}
+    async def execute(self, *args: str) -> None:
+        """命令执行逻辑"""
+        pass
 ```
 
 ## 关键依赖与配置
@@ -55,84 +50,58 @@ async def sync_article(article_id: int, background_tasks: BackgroundTasks):
 
 | 依赖 | 用途 |
 |------|------|
-| `httpx` | 异步 HTTP 客户端（调用 Dify API） |
-| `logging` | 任务日志记录 |
-
-### 配置
-
-Dify 向量库配置在 `app/core/config.py` 中：
-
-```python
-# Dify 配置
-DIFY_API_KEY: str              # API 密钥
-DIFY_KB_DATASET_ID: str        # 知识库 ID
-DIFY_API_URL: str              # API 基础 URL
-```
+| `asyncio` | 异步执行支持 |
 
 ## 数据模型
 
-本模块无独立数据模型，操作 `app/models/article_news.py` 中的 `ArticleNews` 模型。
-
-### 同步状态字段
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `is_vector_synced` | BooleanField | 是否已同步到向量库 |
-| `vector_synced_at` | DatetimeField | 向量库同步时间 |
+无数据模型。
 
 ## 测试与质量
 
-建议添加测试：
-
 ```python
-# tests/test_command/test_sync.py
-async def test_sync_vector():
-    article = await ArticleNews.get_or_none(id=1)
-    async with httpx.AsyncClient() as client:
-        success = await sync_single_article(client, article)
-    assert success
+# 测试命令执行
+import asyncio
+from app.command.test import Command
+
+async def test_command():
+    cmd = Command()
+    await cmd.execute("test_args")
+    assert cmd.name == "test"
 ```
 
 ## 常见问题 (FAQ)
 
-**Q: 如何添加新的 CLI 命令？**
+**Q: 如何添加新的命令？**
 
-1. 在 `app/command/` 目录创建新文件
-2. 定义命令执行函数
-3. 可选择通过路由或独立脚本触发
+1. 创建 `app/command/<name>.py`
+2. 定义继承基类的命令类
+3. 实现 `execute` 方法
 
 ```python
-# command/cleanup.py
-async def cleanup_old_data():
-    """清理过期数据"""
-    ...
+class NewCommand:
+    name = "newcmd"
+    description = "新命令描述"
+    
+    async def execute(self, *args: str) -> None:
+        print(f"执行新命令: {args}")
 ```
-
-**Q: 如何定时执行命令？**
-
-使用外部调度器（如 cron、Celery Beat）：
-
-```bash
-# crontab 示例
-0 2 * * * cd /path/to/project && source .venv/bin/activate && python -m app.command.sync_vector
-```
-
-**Q: 后台任务与直接调用的区别？**
-
-- **后台任务**：接口立即返回，任务在后台异步执行，适用于耗时操作
-- **直接调用**：等待任务完成再返回，适用于快速操作
 
 ## 相关文件清单
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `sync_vector.py` | ~50 行 | 向量同步命令 |
-| `test.py` | ~20 行 | 测试命令 |
-| `__init__.py` | ~5 行 | 模块初始化 |
+| `__init__.py` | 24 行 | 模块初始化 |
+| `test.py` | 21 行 | 测试命令示例 |
 
 ## 变更记录 (Changelog)
+
+### 2026-05-09
+
+- 删除业务命令（sync_vector.py、sync_wecom_article.py）
+- 保留测试命令示例
+- 更新 CLAUDE.md 反映当前状态
 
 ### 2026-04-07
 
 - 创建模块级 CLAUDE.md
-- 整理命令行模块文档
+- 整理命令模块文档

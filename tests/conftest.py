@@ -58,16 +58,10 @@ async def initialize_test_db() -> AsyncGenerator[None, None]:
         _test_db_path = os.path.join(temp_dir, f"fastapi_test_{unique_id}.db")
         test_db_url = f"sqlite://{_test_db_path}"
 
-    # 初始化 Tortoise ORM
+    # 初始化 Tortoise ORM（使用空的测试模型配置）
     await Tortoise.init(
         db_url=test_db_url,
-        modules={
-            "models": [
-                "app.models.user",
-                "app.models.article_news",
-                "app.models.wecom_msg_cursor",
-            ]
-        },
+        modules={"models": ["tests.fixtures.empty_models"]},
     )
 
     # 生成数据库表结构
@@ -98,20 +92,7 @@ async def reset_db_state() -> AsyncGenerator[None, None]:
     """
     yield
 
-    # 清理所有模型的数据
-    from app.models.user import User
-    from app.models.article_news import ArticleNews
-    from app.models.wecom_msg_cursor import WecomMsgCursor
-
-    # 检查数据库连接是否仍然活跃
-    try:
-        if Tortoise._connections:
-            await User.all().delete()
-            await ArticleNews.all().delete()
-            await WecomMsgCursor.all().delete()
-    except Exception:
-        # 如果数据库已关闭或不可用，忽略清理错误
-        pass
+    # 无业务模型，无需清理
 
 
 # ==================== Redis fixtures ====================
@@ -147,62 +128,11 @@ def client() -> Generator[TestClient, None, None]:
 
     Example:
         >>> def test_hello(client):
-        ...     response = client.get("/api/v1/hello/")
+        ...     response = client.get("/api/v1/langchain/")
         ...     assert response.status_code == 200
     """
     with TestClient(app) as test_client:
         yield test_client
-
-
-# ==================== 测试用户 fixtures ====================
-
-@pytest.fixture
-async def test_user() -> AsyncGenerator["User", None]:
-    """
-    创建测试用户 fixture
-
-    在需要认证或用户关联数据的测试中使用
-
-    Example:
-        >>> async def test_with_user(test_user):
-        ...     assert test_user.username == "test_user"
-    """
-    from app.models.user import User
-    from app.core.security import get_password_hash
-
-    user = await User.create(
-        username="test_user",
-        email="test@example.com",
-        hashed_password=get_password_hash("test_password"),
-        is_active=True,
-    )
-
-    yield user
-
-    # 清理测试用户
-    await user.delete()
-
-
-@pytest.fixture
-async def test_inactive_user() -> AsyncGenerator["User", None]:
-    """
-    创建未激活测试用户 fixture
-
-    用于测试用户状态过滤逻辑
-    """
-    from app.models.user import User
-    from app.core.security import get_password_hash
-
-    user = await User.create(
-        username="inactive_user",
-        email="inactive@example.com",
-        hashed_password=get_password_hash("test_password"),
-        is_active=False,
-    )
-
-    yield user
-
-    await user.delete()
 
 
 # ==================== 标记注册 ====================

@@ -16,13 +16,7 @@ async def init_test_db(db_url: str = "sqlite://:memory:") -> None:
     """
     await Tortoise.init(
         db_url=db_url,
-        modules={
-            "models": [
-                "app.models.user",
-                "app.models.article_news",
-                "app.models.wecom_msg_cursor",
-            ]
-        },
+        modules={"models": ["tests.fixtures.empty_models"]},
     )
     await Tortoise.generate_schemas()
 
@@ -52,14 +46,10 @@ async def clear_all_tables(models: Optional[List[Model]] = None) -> None:
     清空所有模型的数据表
 
     Args:
-        models: 要清空的模型列表，默认清空所有测试模型
+        models: 要清空的模型列表
     """
     if models is None:
-        from app.models.user import User
-        from app.models.article_news import ArticleNews
-        from app.models.wecom_msg_cursor import WecomMsgCursor
-
-        models = [User, ArticleNews, WecomMsgCursor]
+        return
 
     for model in models:
         await clear_table(model)

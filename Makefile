@@ -28,13 +28,14 @@ else
     CONTAINER = $(DEPLOY_CONTAINER)
 endif
 
-.PHONY: help deploy restart logs
+.PHONY: help deploy rebuild restart logs
 
 help:
 	@echo "可用命令列表:"
 	@echo "  make deploy                     - \033[0;32m同步代码到默认服务器 (xiaoxi149) 并重启容器\033[0m"
 	@echo "  make deploy DEPLOY_TARGET=dev92 - \033[0;32m同步代码到 dev92 服务器\033[0m"
 	@echo "  make deploy DEPLOY_TARGET=xiaoxi149 - \033[0;32m同步代码到 xiaoxi149 服务器\033[0m"
+	@echo "  make rebuild                    - 仅重建并拉起默认服务器容器（不做代码同步）"
 	@echo "  make restart                    - 重启默认服务器容器"
 	@echo "  make logs                       - 追踪服务器端容器日志"
 
@@ -56,6 +57,11 @@ deploy:
 	@echo "$(GREEN)🔄 正在重建并拉起容器以应用新代码...$(NC)"
 	ssh $(SERVER) "cd $(REMOTE_PATH) && docker-compose up -d --build $(CONTAINER)"
 	@echo "$(GREEN)✅ 部署完成！$(NC)"
+
+rebuild:
+	@echo "$(GREEN)🔨 正在重建并拉起容器 $(CONTAINER)（不做代码同步）...$(NC)"
+	ssh $(SERVER) "cd $(REMOTE_PATH) && docker-compose up -d --build $(CONTAINER)"
+	@echo "$(GREEN)✅ 重建并拉起完成！$(NC)"
 
 restart:
 	@echo "$(GREEN)🔄 重启容器 $(CONTAINER)...$(NC)"

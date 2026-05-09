@@ -22,10 +22,10 @@ async def test_mysql():
     print(f"数据库 URL: {settings.DATABASE_URL}")
 
     try:
-        # 初始化 Tortoise ORM
+        # 初始化 Tortoise ORM（无业务模型）
         await Tortoise.init(
             db_url=settings.DATABASE_URL,
-            modules={"models": ["app.models.user", "app.models.article_news"]},
+            modules={"models": []},
         )
 
         # 执行简单查询测试连接

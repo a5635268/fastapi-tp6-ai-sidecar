@@ -1,0 +1,202 @@
+# MCP Database Tools 技术文档
+
+## 1. 概述
+
+**mcp-db-tools** 是一个基于 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 的数据库操作服务器，为 LLM 和 AI Agent 提供安全、受控的 MySQL 数据库访问能力。
+
+它作为独立进程运行，通过 `stdio` 与 MCP Client（如 Claude Desktop、Cursor 等）通信，提供以下能力：
+
+- 查询表结构
+- 执行 SELECT 查询
+- 执行 UPDATE/DELETE（带二次确认机制）
+
+## 2. 定位与边界
+
+| 项 | 说明 |
+|---|---|
+| 运行方式 | 独立 Python 进程，非 FastAPI 路由的一部分 |
+| 传输协议 | MCP stdio（标准输入输出） |
+| 支持数据库 | MySQL（通过 `aiomysql`） |
+| 适用环境 | 仅允许 `test` / `dev` / `localhost` / `127.0.0.1` 环境 |
+| 安全等级 | 开发/测试辅助工具，**不用于生产数据库直连** |
+
+## 3. 文件结构
+
+```text
+app/mcp/db_tools/
+├── __init__.py
+└── server.py          # MCP Server 主实现
+
+tests/mcp/
+├── conftest.py        # 测试 fixtures
+├── test_server_core.py # 单元测试（安全、LIMIT、环境隔离、Token）
+└── test_integration.py # 集成测试（pending→confirmed、真实数据库）
+
+docs/mcp-db-tools/
+├── technical.md       # 本文档
+└── usage.md           # 使用说明
+```
+
+## 4. 核心组件
+
+### 4.1 DBConnectionPool
+
+单例连接池管理类：
+
+- `create_pool()`: 根据 `DATABASE_URL` 创建 `aiomysql.Pool`
+- `get_pool()`: 获取当前连接池
+- `close_pool()`: 关闭连接池
+
+**环境隔离检查**：创建连接池前会检查 `DATABASE_URL` 是否包含 `test`、`dev`、`localhost` 或 `127.0.0.1`，防止误连生产数据库。
+
+### 4.2 工具注册
+
+通过 `@server.list_tools()` 注册 3 个工具：
+
+| 工具名 | 功能 | 风险等级 |
+|---|---|---|
+| `get_table_schema` | `DESCRIBE {table}` 查询表结构 | 只读，低风险 |
+| `execute_query` | 执行 SELECT 查询，自动加 `LIMIT 100` | 只读，低风险 |
+| `execute_update` | 执行 UPDATE/DELETE，需 pending→confirmed 确认 | 写操作，高风险 |
+
+### 4.3 安全机制
+
+#### DDL 保护
+
+禁止以下 DDL 操作：
+
+- `DROP`
+- `ALTER TABLE`
+- `TRUNCATE`
+- `CREATE TABLE`
+
+实现：正则匹配 `DDL_BLACKLIST`，命中即返回错误。
+
+#### WHERE 条件检查
+
+`UPDATE` / `DELETE` 必须包含 `WHERE` 子句，防止全表修改。
+
+#### 自动 LIMIT
+
+`SELECT` 未包含 `LIMIT` 时，自动追加 `LIMIT 100`。
+
+#### 环境隔离
+
+仅允许连接测试/开发环境数据库。
+
+#### 查询超时
+
+所有数据库操作统一 30 秒超时。
+
+### 4.4 Pending → Confirmed 流程
+
+对于 `execute_update`，采用二次确认机制防止误操作：
+
+```text
+第一次调用（无 pending_token）:
+  1. DDL / WHERE 检查
+  2. 预估影响行数（COUNT(*)）
+  3. 生成 32 位 token，60 秒过期
+  4. 返回 pending 状态、token、影响预览
+
+第二次调用（带 pending_token）:
+  1. 验证 token 存在且未过期
+  2. 验证 SQL 与 token 中记录一致
+  3. 执行 SQL
+  4. 写审计日志
+  5. 删除 token
+  6. 返回 success 状态和实际影响行数
+```
+
+Token 存储在内存字典 `_pending_tokens` 中，进程重启后清空。
+
+### 4.5 审计日志
+
+每次 `execute_update` 成功执行后，写入 `~/.gstack/mcp-audit.log`：
+
+```json
+{"ts": "2026-06-24T10:30:00.000000Z", "tool": "execute_update", "sql": "...", "status": "success", "affected": 5, "preview": "将修改 5 行"}
+```
+
+## 5. 数据流
+
+```text
+MCP Client
+    │
+    ▼
+┌─────────────────┐
+│  stdio_server   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     ┌──────────────────┐
+│   call_tool()   │────▶│  安全/权限检查    │
+└────────┬────────┘     └──────────────────┘
+         │
+         ▼
+┌─────────────────┐     ┌──────────────────┐
+│ _get_table_schema│     │  _execute_query  │
+│ _execute_query   │     │ _execute_update  │
+└────────┬────────┘     └────────┬─────────┘
+         │                       │
+         ▼                       ▼
+┌──────────────────────────────────────┐
+│         DBConnectionPool              │
+│     (aiomysql connection pool)        │
+└──────────────────────────────────────┘
+         │
+         ▼
+      MySQL
+```
+
+## 6. 依赖
+
+```toml
+[project]
+dependencies = [
+    "mcp>=1.27.1",
+    "aiomysql>=0.3.2",
+]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.35.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+]
+```
+
+## 7. 启动入口
+
+```bash
+python -m app.mcp.db_tools.server
+```
+
+或：
+
+```bash
+python app/mcp/db_tools/server.py
+```
+
+## 8. 已知限制
+
+1. **仅支持 MySQL**：当前通过 `aiomysql` 实现，未抽象数据库层。
+2. **Token 内存存储**：进程重启后 pending token 丢失。
+3. **仅开发/测试环境**：生产环境需要更完整的权限审计和审批流程。
+4. **审计日志本地文件**：存储在用户目录，未对接外部审计系统。
+
+## 9. 测试覆盖
+
+| 测试文件 | 用例数 | 覆盖重点 |
+|---|---|---|
+| `test_server_core.py` | 18 | DDL 保护、WHERE 检查、LIMIT、环境隔离、Token 机制 |
+| `test_integration.py` | 6 | pending→confirmed 流程、真实数据库操作 |
+
+运行命令：
+
+```bash
+uv run pytest tests/mcp/ -v
+```
+
+当前 `app/mcp/db_tools/server.py` 覆盖率：约 70%。

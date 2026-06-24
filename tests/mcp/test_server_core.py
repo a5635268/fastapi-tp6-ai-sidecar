@@ -17,7 +17,6 @@ from app.mcp.db_tools.server import (
 )
 
 
-@pytest.mark.asyncio
 class TestSecurityChecks:
     """安全机制测试"""
 
@@ -58,7 +57,6 @@ class TestSecurityChecks:
         assert result is None
 
 
-@pytest.mark.asyncio
 class TestWhereConditionChecks:
     """WHERE条件检查测试"""
 
@@ -90,7 +88,6 @@ class TestWhereConditionChecks:
         assert result is None
 
 
-@pytest.mark.asyncio
 class TestLimitAutoAdd:
     """自动LIMIT测试"""
 
@@ -117,10 +114,10 @@ class TestLimitAutoAdd:
         assert modified == sql
 
 
-@pytest.mark.asyncio
 class TestEnvironmentIsolation:
     """环境隔离测试"""
 
+    @pytest.mark.asyncio
     @patch('app.mcp.db_tools.server.settings')
     async def test_production_url_blocked(self, mock_settings):
         """生产环境DATABASE_URL启动失败"""
@@ -137,6 +134,7 @@ class TestEnvironmentIsolation:
 
         assert "仅允许测试/开发环境" in str(exc_info.value)
 
+    @pytest.mark.asyncio
     @patch('app.mcp.db_tools.server.settings')
     async def test_test_url_allowed(self, mock_settings):
         """测试环境DATABASE_URL启动成功"""
@@ -157,7 +155,6 @@ class TestEnvironmentIsolation:
             mock_pool.assert_called_once()
 
 
-@pytest.mark.asyncio
 class TestPendingTokenMechanism:
     """pending→confirmed机制测试"""
 

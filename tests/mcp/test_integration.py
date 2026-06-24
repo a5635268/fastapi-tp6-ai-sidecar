@@ -5,6 +5,7 @@ Tests: pending→confirmed flow, real database operations
 import pytest
 import asyncio
 import aiomysql
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.mcp.db_tools.server import DBConnectionPool, _pending_tokens, _execute_update
@@ -28,6 +29,7 @@ class TestConfirmationFlow:
 
         # Mock estimate_affected_rows
         mock_cursor.fetchone.return_value = (5,)  # COUNT(*) = 5
+        mock_cursor.execute = AsyncMock()
         mock_conn.cursor.return_value.__aenter__.return_value = mock_cursor
         mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
         mock_get_pool.return_value = mock_pool
@@ -51,24 +53,21 @@ class TestConfirmationFlow:
 
         # Mock execution
         mock_cursor.rowcount = 5
+        mock_cursor.execute = AsyncMock()
         mock_conn.cursor.return_value.__aenter__.return_value = mock_cursor
         mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
         mock_get_pool.return_value = mock_pool
 
-        # Setup pending token
+        # Setup pending token (60秒内有效)
         token = "test_token_abc123"
         sql = "UPDATE users SET points=100 WHERE id=1"
         _pending_tokens[token] = {
             "sql": sql,
             "preview": "将修改5行",
-            "expires_at": asyncio.get_event_loop().time() + 60,
+            "expires_at": datetime.utcnow() + timedelta(seconds=60),
         }
 
-        # Mock datetime for expiry check
-        with patch('app.mcp.db_tools.server.datetime') as mock_datetime:
-            mock_datetime.utcnow.return_value = asyncio.get_event_loop().time()
-
-            result = await _execute_update(mock_pool, sql, token)
+        result = await _execute_update(mock_pool, sql, token)
 
         assert len(result) == 1
         import json
@@ -88,15 +87,12 @@ class TestConfirmationFlow:
         _pending_tokens[token] = {
             "sql": sql,
             "preview": "将修改5行",
-            "expires_at": asyncio.get_event_loop().time() - 1,  # 已过期
+            "expires_at": datetime.utcnow() - timedelta(seconds=1),
         }
 
         mock_pool = MagicMock()
 
-        with patch('app.mcp.db_tools.server.datetime') as mock_datetime:
-            mock_datetime.utcnow.return_value = asyncio.get_event_loop().time()
-
-            result = await _execute_update(mock_pool, sql, token)
+        result = await _execute_update(mock_pool, sql, token)
 
         assert len(result) == 1
         assert "Token已过期" in result[0].text
@@ -117,7 +113,7 @@ class TestConfirmationFlow:
 class TestRealDatabaseOperations:
     """真实数据库操作测试(需要TEST_DATABASE_URL)"""
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     async def real_pool(self):
         """创建真实数据库连接池"""
         from app.core.config import settings
@@ -131,7 +127,7 @@ class TestRealDatabaseOperations:
             port=settings._parse_db_port(),
             user=settings._parse_db_user(),
             password=settings._parse_db_password(),
-            database=settings._parse_db_name(),
+            db=settings._parse_db_name(),
             minsize=1,
             maxsize=5,
             autocommit=True,

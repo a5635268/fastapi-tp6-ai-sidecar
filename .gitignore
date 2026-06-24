@@ -41,3 +41,5 @@ temp/
 .coverage.*
 htmlcov/
 *.cover
+.worktrees/
+

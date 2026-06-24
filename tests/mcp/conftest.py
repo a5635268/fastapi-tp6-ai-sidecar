@@ -42,9 +42,7 @@ async def mcp_mock_pool():
 @pytest.fixture
 def clean_pending_tokens():
     """清空pending tokens"""
-    import sys
-    sys.path.insert(0, ".claude/mcp-servers/db-tools")
-    from server import _pending_tokens
+    from app.mcp.db_tools.server import _pending_tokens
 
     _pending_tokens.clear()
     yield

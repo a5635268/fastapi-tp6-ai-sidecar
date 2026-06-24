@@ -8,9 +8,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import from server module
-import sys
-sys.path.insert(0, ".claude/mcp-servers/db-tools")
-from server import (
+from app.mcp.db_tools.server import (
     check_ddl_protection,
     check_where_condition,
     add_limit_if_missing,
@@ -123,7 +121,7 @@ class TestLimitAutoAdd:
 class TestEnvironmentIsolation:
     """环境隔离测试"""
 
-    @patch('server.settings')
+    @patch('app.mcp.db_tools.server.settings')
     async def test_production_url_blocked(self, mock_settings):
         """生产环境DATABASE_URL启动失败"""
         mock_settings.DATABASE_URL = "mysql://user:pass@prod-db.company.com:3306/production"
@@ -139,7 +137,7 @@ class TestEnvironmentIsolation:
 
         assert "仅允许测试/开发环境" in str(exc_info.value)
 
-    @patch('server.settings')
+    @patch('app.mcp.db_tools.server.settings')
     async def test_test_url_allowed(self, mock_settings):
         """测试环境DATABASE_URL启动成功"""
         mock_settings.DATABASE_URL = "mysql://user:pass@localhost:3306/testdb"

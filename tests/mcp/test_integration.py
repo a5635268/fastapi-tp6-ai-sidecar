@@ -7,9 +7,7 @@ import asyncio
 import aiomysql
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import sys
-sys.path.insert(0, ".claude/mcp-servers/db-tools")
-from server import DBConnectionPool, _pending_tokens, _execute_update
+from app.mcp.db_tools.server import DBConnectionPool, _pending_tokens, _execute_update
 
 
 @pytest.mark.asyncio
@@ -21,7 +19,7 @@ class TestConfirmationFlow:
         """清空pending tokens"""
         _pending_tokens.clear()
 
-    @patch('server.DBConnectionPool.get_pool')
+    @patch('app.mcp.db_tools.server.DBConnectionPool.get_pool')
     async def test_first_call_returns_pending(self, mock_get_pool):
         """第一次调用返回pending状态"""
         mock_pool = MagicMock()
@@ -44,7 +42,7 @@ class TestConfirmationFlow:
         assert len(response["token"]) == 32
         assert "preview" in response
 
-    @patch('server.DBConnectionPool.get_pool')
+    @patch('app.mcp.db_tools.server.DBConnectionPool.get_pool')
     async def test_second_call_executes_success(self, mock_get_pool):
         """第二次调用执行成功"""
         mock_pool = MagicMock()
@@ -67,7 +65,7 @@ class TestConfirmationFlow:
         }
 
         # Mock datetime for expiry check
-        with patch('server.datetime') as mock_datetime:
+        with patch('app.mcp.db_tools.server.datetime') as mock_datetime:
             mock_datetime.utcnow.return_value = asyncio.get_event_loop().time()
 
             result = await _execute_update(mock_pool, sql, token)
@@ -95,7 +93,7 @@ class TestConfirmationFlow:
 
         mock_pool = MagicMock()
 
-        with patch('server.datetime') as mock_datetime:
+        with patch('app.mcp.db_tools.server.datetime') as mock_datetime:
             mock_datetime.utcnow.return_value = asyncio.get_event_loop().time()
 
             result = await _execute_update(mock_pool, sql, token)
@@ -146,7 +144,7 @@ class TestRealDatabaseOperations:
 
     async def test_get_table_schema_real(self, real_pool):
         """真实数据库:查询表结构"""
-        from server import _get_table_schema
+        from app.mcp.db_tools.server import _get_table_schema
 
         # 假设users表存在
         result = await _get_table_schema(real_pool, "users")
@@ -164,7 +162,7 @@ class TestRealDatabaseOperations:
 
     async def test_execute_query_real(self, real_pool):
         """真实数据库:执行查询"""
-        from server import _execute_query
+        from app.mcp.db_tools.server import _execute_query
 
         result = await _execute_query(real_pool, "SELECT 1 as test_value")
 

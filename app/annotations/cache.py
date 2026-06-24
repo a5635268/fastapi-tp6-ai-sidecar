@@ -9,7 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from functools import wraps
-from typing import Any, Optional, Dict, TypeVar, Union, Set
+from typing import Any, Optional, Dict, ParamSpec, TypeVar, Union, Set
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
@@ -22,7 +22,7 @@ from app.core.redis import RedisUtil
 
 logger = logging.getLogger(__name__)
 
-P = TypeVar('P')
+P = ParamSpec('P')
 R = TypeVar('R')
 
 

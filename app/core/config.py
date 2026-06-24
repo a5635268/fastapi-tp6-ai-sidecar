@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    # 日志配置
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: str = "logs"
+    LOG_MAX_BYTES: int = 10 * 1024 * 1024
+    LOG_BACKUP_COUNT: int = 5
+    LOG_RETENTION_DAYS: int = 30
+    LOG_FORMAT: str = "text"  # text/json/seaslog
+    LOG_SEASLOG_TEMPLATE: str = "[%T] | %L | %P | %Q | %R %U | %I | %M"
+
     # 数据库配置
     DATABASE_URL: str = "mysql://root:root123456@127.0.0.1:3306/test"
 
@@ -77,41 +86,12 @@ class Settings(BaseSettings):
             # 未知类型，直接透传 URL（兜底方案）
             db_config = url
 
-        # 动态日志 logger：根据实际驱动类型注册对应的调试日志
-        driver_loggers = {}
-        if is_mysql:
-            driver_loggers["aiomysql"] = {"level": "DEBUG", "handlers": ["console"]}
-        elif is_postgres:
-            driver_loggers["asyncpg"] = {"level": "DEBUG", "handlers": ["console"]}
-
         return {
             "connections": {"default": db_config},
             "apps": {
                 "models": {
                     "models": [],  # 无业务模型
                     "default_connection": "default",
-                },
-            },
-            "logging": {
-                "version": 1,
-                "disable_existing_loggers": False,
-                "formatters": {
-                    "default": {
-                        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-                    }
-                },
-                "handlers": {
-                    "console": {
-                        "class": "logging.StreamHandler",
-                        "formatter": "default",
-                    }
-                },
-                "loggers": {
-                    "tortoise.db_client": {
-                        "level": "DEBUG",
-                        "handlers": ["console"],
-                    },
-                    **driver_loggers,
                 },
             },
         }

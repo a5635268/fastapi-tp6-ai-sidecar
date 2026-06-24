@@ -3,22 +3,25 @@
 提供装饰器风格的操作日志记录能力
 自动捕获方法执行时间、请求参数、返回结果
 """
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, Optional, ParamSpec, TypeVar, Union
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 
 from app.core.constants import BusinessType
 from app.core.context import RequestContext
+from app.core.logging import get_request_id
 
 logger = logging.getLogger(__name__)
 
-P = TypeVar('P')
+P = ParamSpec('P')
 R = TypeVar('R')
+MAX_LOG_FIELD_LENGTH = 2000
 
 
 class Log:
@@ -82,6 +85,7 @@ class Log:
                 'title': self.title or func.__name__,
                 'business_type': self.business_type.name if isinstance(self.business_type, BusinessType) else str(self.business_type),
                 'method': func.__name__,
+                'request_id': get_request_id(),
             }
 
             # 获取操作人信息
@@ -129,14 +133,7 @@ class Log:
                     log_data_copy['request_params'] = request_params
 
                 # 输出错误日志
-                logger.error(
-                    '操作日志 [title=%s] [type=%s] [operator=%s] [status=failed] [time=%.2fms] [error=%s]',
-                    log_data_copy['title'],
-                    log_data_copy['business_type'],
-                    log_data_copy['operator'],
-                    log_data_copy['execution_time_ms'],
-                    log_data_copy['error'],
-                )
+                self._write_log(log_data_copy, level=logging.ERROR)
 
                 # 重新抛出异常，让上层处理
                 raise
@@ -278,16 +275,22 @@ class Log:
             elif isinstance(value, (list, tuple)) and depth < max_depth:
                 # 列表/元组中的字典也要处理
                 sanitized[key] = [
-                    self._sanitize_params(item, depth + 1) if isinstance(item, dict) else item
+                    self._sanitize_params(item, depth + 1) if isinstance(item, dict) else self._truncate_value(item)
                     for item in value
                 ]
             else:
                 try:
-                    sanitized[key] = jsonable_encoder(value)
+                    sanitized[key] = self._truncate_value(jsonable_encoder(value))
                 except Exception:
-                    sanitized[key] = str(value)
+                    sanitized[key] = self._truncate_value(str(value))
 
         return sanitized
+
+    def _truncate_value(self, value: Any) -> Any:
+        """限制单字段长度，避免大对象撑爆日志。"""
+        if isinstance(value, str) and len(value) > MAX_LOG_FIELD_LENGTH:
+            return f"{value[:MAX_LOG_FIELD_LENGTH]}...(truncated)"
+        return value
 
     def _serialize_response(self, response: Any) -> Union[dict, str]:
         """
@@ -304,26 +307,20 @@ class Log:
             # 对字典类型的响应进行脱敏
             if isinstance(serialized, dict):
                 return self._sanitize_params(serialized)
-            return serialized
+            return self._truncate_value(serialized)
         except Exception:
-            return str(response)
+            return self._truncate_value(str(response))
 
-    def _write_log(self, log_data: dict) -> None:
+    def _write_log(self, log_data: dict, level: Optional[int] = None) -> None:
         """
         输出日志
 
         Args:
             log_data: 日志数据字典
+            level: 日志级别，默认使用装饰器初始化级别
         """
-        logger.log(
-            self.log_level,
-            '操作日志 [title=%s] [type=%s] [operator=%s] [status=%s] [time=%.2fms]',
-            log_data['title'],
-            log_data['business_type'],
-            log_data['operator'],
-            log_data['status'],
-            log_data['execution_time_ms'],
-        )
+        message = json.dumps(log_data, ensure_ascii=False, default=str, separators=(',', ':'))
+        logger.log(level or self.log_level, message)
 
 
 def log_operation(

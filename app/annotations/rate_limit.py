@@ -10,7 +10,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Optional, Dict, TypeVar, Literal, Set
+from typing import Any, Optional, Dict, Literal, ParamSpec, TypeVar, Set
 
 from fastapi import Request
 from redis import asyncio as aioredis
@@ -22,7 +22,7 @@ from app.core.redis import RedisUtil
 
 logger = logging.getLogger(__name__)
 
-P = TypeVar('P')
+P = ParamSpec('P')
 R = TypeVar('R')
 
 # 类型定义

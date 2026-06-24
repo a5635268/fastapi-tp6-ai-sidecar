@@ -11,11 +11,9 @@ from fastapi.exceptions import RequestValidationError
 import uvicorn
 from tortoise.contrib.fastapi import register_tortoise
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-import os
 
 from app.core.config import settings
+from app.core.logging import add_request_id_middleware, configure_logging
 from app.core.response import ResponseBuilder, ApiException, ErrorCodeManager
 from app.core.redis import RedisUtil
 from app.core.arq import ArqUtil
@@ -32,45 +30,7 @@ from app.routers import langchain
 
 # ==================== 配置全局日志 ====================
 
-# 创建 logs 目录
-LOGS_DIR = Path(__file__).parent.parent / "logs"
-LOGS_DIR.mkdir(exist_ok=True)
-
-# 根日志配置
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        # 控制台输出
-        logging.StreamHandler(),
-        # 文件输出（所有日志）
-        RotatingFileHandler(
-            LOGS_DIR / "app.log",
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,           # 保留 5 个备份
-            encoding="utf-8"
-        ),
-        # 错误日志单独文件
-        logging.FileHandler(LOGS_DIR / "error.log", encoding="utf-8"),
-    ]
-)
-
-# 设置错误日志级别过滤器
-class ErrorLogFilter(logging.Filter):
-    """只记录 ERROR 及以上级别的日志"""
-    def filter(self, record):
-        return record.levelno >= logging.ERROR
-
-# 为 error.log 只添加错误级别日志
-for handler in logging.getLogger().handlers:
-    if isinstance(handler, logging.FileHandler) and "error.log" in handler.baseFilename:
-        handler.setLevel(logging.ERROR)
-        handler.addFilter(ErrorLogFilter())
-
-# 框架级日志：统一在 basicConfig 之后设置，避免 import 时序问题
-logging.getLogger("tortoise.db_client").setLevel(logging.DEBUG)
-logging.getLogger("aiomysql").setLevel(logging.DEBUG)
-logging.getLogger("asyncmy").setLevel(logging.DEBUG)
+configure_logging()
 
 # 创建应用专用 logger
 logger = logging.getLogger(__name__)
@@ -105,6 +65,9 @@ app = FastAPI(
 
 # 上下文清理中间件（最早注册，最后执行）
 add_context_cleanup_middleware(app)
+
+# 请求链路 ID 中间件
+add_request_id_middleware(app)
 
 # CORS 中间件
 app.add_middleware(

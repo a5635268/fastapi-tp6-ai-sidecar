@@ -35,6 +35,7 @@ temp/
 
 ## Claude Code
 .claude/
+.serena/
 
 ## Test coverage (pytest-cov)
 .coverage
@@ -42,4 +43,3 @@ temp/
 htmlcov/
 *.cover
 .worktrees/
-

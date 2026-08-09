@@ -9,7 +9,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.config import settings
 from app.core.context import RequestContext
-from app.core.exceptions import LoginException
+from app.core.exceptions import AuthException, LoginException
+from app.core.security import validate_token
 
 # ==================== 认证依赖 ====================
 
@@ -17,58 +18,66 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    http_request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     """
     获取当前认证用户依赖
-    解析 JWT Token 并返回用户信息
+    解析 JWT Access Token 并返回用户信息
 
     Raises:
-        HTTPException: 未提供认证信息时抛出 401 异常
-        LoginException: 认证信息无效时抛出登录异常
+        AuthException: 未提供或 Token 无效时抛出 401 异常
 
     Returns:
         dict: 用户信息字典
     """
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="未提供认证信息",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if not credentials or not credentials.credentials:
+        raise AuthException(code=2, message="未提供认证 Token", http_status=401)
 
-    token = credentials.credentials
-
-    # TODO: 实现 JWT token 解析逻辑
-    # 这里仅作为示例框架，实际使用需要结合 security.py 中的方法
-
-    # 示例：返回一个模拟用户
-    return {"id": 1, "username": "demo_user"}
+    payload = await validate_token(
+        credentials.credentials,
+        expected_type="access",
+        user_agent=http_request.headers.get("User-Agent", ""),
+    )
+    user_id = payload.get("sub")
+    return {
+        "id": int(user_id) if user_id and str(user_id).isdigit() else user_id,
+        "username": f"user_{user_id}",
+        "payload": payload,
+    }
 
 
 async def get_current_user_or_none(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    http_request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Optional[Dict[str, Any]]:
     """
     获取当前认证用户依赖（可选认证）
 
     与 get_current_user 不同的是：
-    - 无认证信息时返回 None 而不是抛异常
+    - 无认证信息或校验失败时返回 None 而不是抛异常
     - 适用于可选认证的路由（如公开 API 但支持个性化）
 
     Returns:
         Optional[Dict[str, Any]]: 用户信息字典，未认证时返回 None
     """
-    if not credentials:
+    if not credentials or not credentials.credentials:
         return None
 
-    token = credentials.credentials
-
-    # TODO: 实现 JWT token 解析逻辑
-    # 解析失败时返回 None
-
-    # 示例：返回一个模拟用户
-    return {"id": 1, "username": "demo_user"}
+    try:
+        payload = await validate_token(
+            credentials.credentials,
+            expected_type="access",
+            user_agent=http_request.headers.get("User-Agent", ""),
+        )
+        user_id = payload.get("sub")
+        return {
+            "id": int(user_id) if user_id and str(user_id).isdigit() else user_id,
+            "username": f"user_{user_id}",
+            "payload": payload,
+        }
+    except AuthException:
+        return None
 
 
 async def get_request_context_user() -> Dict[str, Any]:

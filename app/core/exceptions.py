@@ -34,18 +34,26 @@ class AuthException(Exception):
     用于令牌认证失败、令牌过期等场景
     """
 
-    def __init__(self, data: Any = None, message: str = "认证失败"):
+    def __init__(
+        self,
+        data: Any = None,
+        message: str = "认证失败",
+        code: int = HttpStatusConstant.UNAUTHORIZED,
+        http_status: int = HttpStatusConstant.UNAUTHORIZED,
+    ):
         """
         初始化异常
 
         Args:
             data: 附加数据
             message: 错误消息
+            code: 错误码
+            http_status: HTTP 状态码
         """
         self.data = data
         self.message = message
-        self.code = HttpStatusConstant.UNAUTHORIZED
-        self.http_status = HttpStatusConstant.UNAUTHORIZED
+        self.code = code
+        self.http_status = http_status
         super().__init__(message)
 
 

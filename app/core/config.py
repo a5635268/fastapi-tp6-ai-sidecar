@@ -90,7 +90,7 @@ class Settings(BaseSettings):
             "connections": {"default": db_config},
             "apps": {
                 "models": {
-                    "models": [],  # 无业务模型
+                    "models": ["app.models"],
                     "default_connection": "default",
                 },
             },
@@ -185,6 +185,8 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    RSA_PRIVATE_KEY_PATH: str = "data/keys/rsa_private_key.pem"
 
     # API Keys (用于集成 OpenAI 等第三方服务)
     OPENAI_API_KEY: Optional[str] = None

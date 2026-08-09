@@ -411,7 +411,13 @@ class ApiException(Exception):
     抛出后由全局异常处理器捕获并返回统一格式的响应
     """
 
-    def __init__(self, code: int, msg: str = "", data: Any = None):
+    def __init__(
+        self,
+        code: int,
+        msg: str = "",
+        data: Any = None,
+        http_status: Optional[int] = None,
+    ):
         """
         初始化异常
 
@@ -419,10 +425,11 @@ class ApiException(Exception):
             code: 错误码
             msg: 自定义消息，为空则从 ErrorCodeManager 获取
             data: 附加数据
+            http_status: 可选的 HTTP 状态码覆盖
         """
         self.code = code
         self.msg = msg or ErrorCodeManager.get_msg(code)
-        self.http_status = ErrorCodeManager.get_http_status(code)
+        self.http_status = http_status if http_status is not None else ErrorCodeManager.get_http_status(code)
         self.data = data
         super().__init__(self.msg)
 

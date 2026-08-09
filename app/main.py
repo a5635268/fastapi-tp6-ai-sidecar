@@ -26,7 +26,7 @@ from app.core.exceptions import (
     ModelValidatorException,
 )
 from app.middlewares.context_cleanup_middleware import add_context_cleanup_middleware
-from app.routers import langchain
+from app.routers import auth, langchain
 
 # ==================== 配置全局日志 ====================
 
@@ -226,6 +226,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # ==================== 路由网关注册 ====================
 
 # 注册子路由模块（多应用路由网关核心逻辑）
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(langchain.router, prefix="/api/v1")
 
 

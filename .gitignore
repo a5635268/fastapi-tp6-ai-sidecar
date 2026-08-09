@@ -43,3 +43,7 @@ temp/
 htmlcov/
 *.cover
 .worktrees/
+
+## Generated runtime files & keys
+data/
+

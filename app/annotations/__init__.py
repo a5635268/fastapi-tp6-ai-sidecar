@@ -2,10 +2,11 @@
 注解系统模块
 提供装饰器风格的业务增强能力
 
-包含三个核心注解系统：
+包含四个核心注解系统：
 1. ApiCache - 接口缓存注解，自动缓存方法结果
 2. ApiRateLimit - 接口限流注解，防止请求过载
 3. Log - 操作日志注解，自动记录方法执行信息
+4. repeat_submit - 防重复提交注解，基于 Redis 实现分布式锁防重提交
 
 使用示例：
 
@@ -34,6 +35,13 @@
     @Log(title='用户登录', business_type=BusinessType.OTHER)
     async def do_login(username: str):
         return {'success': True}
+
+    # 防重复提交注解
+    from app.annotations import repeat_submit
+
+    @repeat_submit(interval_seconds=5, message='请勿重复提交')
+    async def create_campaign(request: Request, data: dict):
+        return {'success': True}
 """
 
 from app.annotations.cache import (
@@ -53,6 +61,11 @@ from app.annotations.log import (
     log_operation,
 )
 
+from app.annotations.repeat_submit import (
+    repeat_submit,
+    RepeatSubmit,
+)
+
 __all__ = [
     # 缓存注解
     'ApiCache',
@@ -67,4 +80,9 @@ __all__ = [
     # 日志注解
     'Log',
     'log_operation',
+
+    # 防重复提交注解
+    'repeat_submit',
+    'RepeatSubmit',
 ]
+

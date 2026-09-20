@@ -2,7 +2,7 @@
 
 # Annotations 模块 CLAUDE.md
 
-> 最后更新：2026-05-06
+> 最后更新：2026-08-09
 
 ## 模块职责
 
@@ -10,6 +10,7 @@
 - 接口缓存注解（ApiCache）
 - 接口限流注解（ApiRateLimit）
 - 操作日志注解（Log）
+- 防重复提交注解（repeat_submit）
 
 基于 Redis 存储，与项目统一响应格式兼容。
 
@@ -20,6 +21,7 @@
 | `cache.py` | 缓存注解与缓存管理（ApiCache、ApiCacheEvict、ApiCacheManager） |
 | `rate_limit.py` | 限流注解与预设配置（ApiRateLimit、ApiRateLimitPreset） |
 | `log.py` | 操作日志注解（Log、log_operation） |
+| `repeat_submit.py` | 防重复提交注解（repeat_submit、RepeatSubmit） |
 | `__init__.py` | 模块导出接口 |
 
 ## 对外接口
@@ -88,6 +90,16 @@ async def login(request: Request, username: str):
 @log_operation('查询用户列表', BusinessType.OTHER)
 async def get_users(request: Request):
     return {'users': []}
+
+### 防重复提交注解
+
+```python
+from app.annotations import repeat_submit
+
+@repeat_submit(interval_seconds=5, message='请勿重复操作')
+async def create_campaign(request: Request, data: dict):
+    return {'success': True}
+```
 ```
 
 ## 关键依赖与配置
@@ -173,6 +185,15 @@ class RedisInitKeyConfig(Enum):
 | `save_request` | bool | True | 是否记录请求参数 |
 | `save_response` | bool | False | 是否记录响应结果 |
 | `log_level` | int | logging.INFO | 日志级别 |
+
+### repeat_submit 参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `interval_seconds` | int | 5 | 防重复提交锁存时长（秒） |
+| `message` | str | '请勿重复操作' | 重复提交时的拦截提示文本 |
+| `header_name` | str | 'X-Idempotency-Key' | 优先提取的幂等请求头名称 |
+| `key_prefix` | Optional[str] | 'repeat_submit' | Redis 键名前缀 |
 
 ## 限流预设配置
 
@@ -308,9 +329,16 @@ await ApiCacheManager.clear_namespace_prefix(redis, 'user')
 | `cache.py` | ~575 行 | 缓存注解实现 |
 | `rate_limit.py` | ~504 行 | 限流注解实现 |
 | `log.py` | ~349 行 | 日志注解实现 |
-| `__init__.py` | ~71 行 | 模块导出 |
+| `repeat_submit.py` | ~215 行 | 防重复提交注解实现 |
+| `__init__.py` | ~75 行 | 模块导出 |
 
 ## 变更记录 (Changelog)
+
+### 2026-08-09
+
+- 新增 `repeat_submit.py` 防重复提交/幂等注解系统。
+- 增加 `RedisInitKeyConfig.REPEAT_SUBMIT` 键注册。
+- 增加单元测试 `test_repeat_submit.py`。
 
 ### 2026-05-06
 

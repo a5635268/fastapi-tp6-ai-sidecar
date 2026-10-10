@@ -72,11 +72,13 @@ uv venv
 source .venv/bin/activate
 
 # 根据 pyproject.toml / uv.lock 自动安装并同步依赖
-uv sync
+uv sync --locked
 ```
 
 > **提示**：uv 创建的虚拟环境是项目隔离的，不会影响系统 Python 或其他项目。
 > Python 解释器存储在 `~/.local/share/uv/`，虚拟环境在项目 `.venv/` 目录。
+
+依赖声明与锁定版本分别以 `pyproject.toml`、`uv.lock` 为准；Docker 使用 `requirements.txt`，运行依赖变更时同步核对这三个文件。两个依赖清单当前并不完全一致：已有环境若额外安装了 `requirements.txt` 中的 OSS、Excel、图片处理包，可用 `uv sync --locked --inexact` 保留这些包，验证时用 `uv run --no-sync` 保留已同步的环境。
 
 ### 2. 配置环境变量
 
@@ -442,7 +444,8 @@ class Command:
 - **配置管理**: pydantic-settings >= 2.1.0
 - **安全认证**: python-jose, passlib[bcrypt]
 - **数据库**: MySQL （支持全异步驱动）
-- **AI 框架**: LangChain >= 0.3.0
+- **AI 框架**: LangChain == 1.4.4
+- **图编排依赖**: LangGraph == 1.2.14（直接依赖，当前尚无业务图实现）
 - **任务队列**: ARQ >= 0.25.0 （纯异步设计）
 - **缓存**: Redis （连接池管理）
 
@@ -460,6 +463,22 @@ class Command:
 ### 使用演示模式（无需 API Key）
 
 当前默认使用 `FakeListChatModel` 进行演示，返回预定义响应。
+
+RAG 也使用演示数据，模型列表为静态配置。LangGraph 已声明为直接依赖，当前源码尚未使用它编排业务工作流；设置 API Key 不会自动切换真实模型。
+
+### 升级与验证
+
+更新 `pyproject.toml` 和 `requirements.txt` 中的目标版本后，从仓库根目录执行：
+
+```bash
+uv lock --upgrade-package langchain --upgrade-package langgraph
+uv sync --locked --inexact
+uv lock --check
+uv pip check
+uv run --no-sync pytest -c tests/pytest.ini tests/unit
+```
+
+升级后还需验证聊天、五种文本处理任务及 LangGraph `StateGraph` 编译执行。测试隔离说明见 [tests/README.md](tests/README.md)。
 
 ### 使用真实 LLM（生产环境）
 
@@ -589,8 +608,10 @@ make restart
 | 命令 | 说明 |
 |------|------|
 | `uv venv` | 创建虚拟环境 |
-| `uv sync` | 根据锁定文件（uv.lock）同步所有依赖 |
+| `uv sync --locked` | 按 uv.lock 同步依赖，锁文件过期时报错 |
+| `uv sync --locked --inexact` | 同步锁定依赖并保留额外安装的包 |
 | `uv run <command>` | 在虚拟环境中运行命令 |
+| `uv run --no-sync <command>` | 使用已同步的环境运行，保留额外安装的包 |
 | `uv add <package>` | 添加依赖并自动更新 pyproject.toml |
 | `uv remove <package>` | 移除依赖 |
 | `uv python list` | 查看可用的 Python 版本 |

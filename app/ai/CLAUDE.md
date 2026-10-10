@@ -2,7 +2,7 @@
 
 # AI 模块 CLAUDE.md
 
-> 最后更新：2026-04-07
+> 最后更新：2026-10-10
 
 ## 模块职责
 
@@ -12,6 +12,8 @@ AI 核心功能模块（Domain 层），提供：
 - RAG 检索生成流水线
 - 大模型工厂与配置
 - 提示词管理器
+
+当前聊天和文本处理使用 `FakeListChatModel`，RAG 返回演示数据，模型列表为静态配置。LangGraph 已安装为直接依赖，尚未实现业务工作流图；依赖安装和验证见 [README](../../README.md#升级与验证)。
 
 ## 入口与启动
 
@@ -98,23 +100,13 @@ task_prompt = get_task_prompt("summarize")
 | `langchain` | AI 应用框架 |
 | `langchain-core` | LangChain 核心组件 |
 | `langchain-community` | LangChain 社区集成 |
+| `langgraph` | 图编排依赖，尚未在业务代码中调用 |
+
+版本以根目录的 `pyproject.toml` 和 `uv.lock` 为准；升级时同步 Docker 使用的 `requirements.txt`。验证聊天消息转换、全部五种文本处理任务和 LangGraph 图编译执行。
 
 ### 配置
 
-当前使用 `FakeListChatModel` 作为演示，生产环境需配置真实 LLM：
-
-```python
-# app/ai/models.py
-from langchain_community.chat_models import ChatOpenAI
-
-def get_llm(model_name: str = "gpt-3.5-turbo"):
-    return ChatOpenAI(
-        model=model_name,
-        temperature=0.7,
-        max_tokens=1000,
-        api_key=settings.OPENAI_API_KEY
-    )
-```
+当前使用 `FakeListChatModel` 作为演示。接入真实模型时，先安装对应的提供商集成包，再修改 `app/ai/models.py`；仅设置 `OPENAI_API_KEY` 不会切换模型。完整步骤见 [真实 LLM 配置](../../README.md#使用真实-llm生产环境)。
 
 ## 数据模型
 
@@ -179,6 +171,11 @@ def get_task_prompt(task: str) -> ChatPromptTemplate:
 | `prompts.py` | ~25 行 | 提示词工厂 |
 
 ## 变更记录 (Changelog)
+
+### 2026-10-10
+
+- 补充 LangGraph 直接依赖、当前演示能力边界及升级验证要求。
+- 真实模型配置统一引用根 README 的提供商集成步骤。
 
 ### 2026-04-07
 

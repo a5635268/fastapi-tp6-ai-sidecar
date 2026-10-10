@@ -18,27 +18,23 @@ tests/
 
 ## 运行测试
 
+从仓库根目录执行。先按根 [README](../README.md#1-使用-uv-创建虚拟环境并安装依赖) 同步环境；以下命令使用已同步的虚拟环境，保留额外安装的包。
+
 ```bash
-# 所有测试
-pytest
+# 单元测试：按目录选择，避免遗漏尚未标记 unit 的用例
+uv run --no-sync pytest -c tests/pytest.ini tests/unit
 
-# 单元测试
-pytest tests/unit/ -m unit
+# ARQ 测试：排除需要真实 Redis 的用例
+uv run --no-sync pytest -c tests/pytest.ini tests/tasks -m 'not requires_redis'
 
-# 集成测试
-pytest tests/integration/ -m integration
+# 所有测试：先准备独立数据库和 Redis
+uv run --no-sync pytest -c tests/pytest.ini tests
 
 # 覆盖率报告
-pytest --cov=app --cov-report=html
+uv run --no-sync pytest -c tests/pytest.ini tests/unit --cov=app --cov-report=html
 
 # 特定文件
-pytest tests/unit/test_core/test_response.py
-
-# 详细输出
-pytest -v
-
-# 并行执行（需要 pytest-xdist）
-pytest -n auto
+uv run --no-sync pytest -c tests/pytest.ini tests/unit/test_core/test_response.py
 ```
 
 ## 测试约定
@@ -83,18 +79,14 @@ async def test_cache_operations():
 
 ## 测试数据库
 
-默认使用 SQLite 内存数据库（`:memory:`）：
+`tests/conftest.py` 默认创建临时 SQLite 文件，使用 `tests.fixtures.empty_models`，结束时清理；`TEST_DATABASE_URL` 可覆盖连接。
 
-```python
-# conftest.py
-await Tortoise.init(
-    db_url="sqlite://:memory:",
-    modules={"models": ["app.models.user", "app.models.article_news"]}
-)
-```
+部分单元测试的 `TestClient` 会执行应用启动逻辑并读取 `.env` 中的 `DATABASE_URL`，运行前也应确认该配置指向独立开发或测试数据库。目录名和标记不能代替连接隔离。
 
 切换到 MySQL 测试数据库：
 
 ```bash
-TEST_DATABASE_URL=mysql://user:pass@host:3306/test_db pytest
+TEST_DATABASE_URL=mysql://user:pass@host:3306/test_db uv run --no-sync pytest -c tests/pytest.ini tests/unit
 ```
+
+ARQ 集成 fixture 直接连接 `localhost:6379` 的 Redis DB 15，不传密码。MCP 真实数据库测试另外读取 `settings.DATABASE_URL`，不通过 `TEST_DATABASE_URL` 切换；运行全量测试前分别核对这些连接。
